@@ -75,6 +75,80 @@ class FaceManager:
         
         return safe_name
     
+    def draw_face_boxes(self, image: np.ndarray, faces: List) -> np.ndarray:
+        """
+        이미지에 얼굴 박스와 인덱스를 그립니다.
+        
+        Args:
+            image: 입력 이미지 (BGR)
+            faces: 탐지된 얼굴 리스트
+            
+        Returns:
+            박스와 인덱스가 그려진 이미지 (BGR)
+        """
+        result_image = image.copy()
+        
+        for i, face in enumerate(faces):
+            bbox = face.bbox
+            x1, y1, x2, y2 = map(int, bbox)
+            
+            # 박스 그리기 (초록색)
+            cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            
+            # 인덱스 텍스트 그리기
+            label = f"{i+1}"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            font_scale = 0.8
+            thickness = 2
+            
+            # 텍스트 크기 계산
+            (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
+            
+            # 텍스트 배경 박스 그리기
+            cv2.rectangle(result_image, 
+                         (x1, y1 - text_height - 10), 
+                         (x1 + text_width + 10, y1), 
+                         (0, 255, 0), -1)
+            
+            # 텍스트 그리기 (검은색)
+            cv2.putText(result_image, label, 
+                       (x1 + 5, y1 - 5), 
+                       font, font_scale, (0, 0, 0), thickness)
+        
+        return result_image
+    
+    def detect_and_draw_faces(self, image: np.ndarray) -> Tuple[bool, str, np.ndarray]:
+        """
+        이미지에서 얼굴을 탐지하고 박스와 인덱스를 그려서 반환합니다.
+        (얼굴 교체 작업에는 영향을 주지 않는 시각화 전용 함수)
+        
+        Args:
+            image: 입력 이미지 (BGR)
+            
+        Returns:
+            (성공여부, 메시지, 박스가 그려진 이미지)
+        """
+        try:
+            # 얼굴 탐지
+            faces = self.detector.detect_faces(image)
+            
+            if not faces:
+                return False, "이미지에서 얼굴을 찾을 수 없습니다.", None
+            
+            # 박스와 인덱스가 그려진 이미지 생성
+            result_image = self.draw_face_boxes(image, faces)
+            
+            # BGR을 RGB로 변환 (Gradio 표시용)
+            result_image_rgb = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
+            
+            message = f"얼굴 탐지 완료!\n탐지된 얼굴 수: {len(faces)}개\n(좌→우, 위→아래 순으로 인덱스 부여)"
+            
+            return True, message, result_image_rgb
+            
+        except Exception as e:
+            logger.error(f"얼굴 탐지 실패: {e}")
+            return False, f"얼굴 탐지 실패: {str(e)}", None
+    
     def extract_first_face(self, image_bgr: np.ndarray, filename: str, image_rgb: np.ndarray = None) -> Tuple[bool, str, str]:
         """
         이미지에서 첫 번째 얼굴을 추출하여 저장합니다.
@@ -676,13 +750,13 @@ def update_embedding_choices():
 
 def process_target_image(file_path):
     """
-    타겟 이미지를 처리합니다.
+    타겟 이미지를 처리하고 얼굴 탐지 결과를 박스로 표시합니다.
     
     Args:
         file_path: 파일 경로
         
     Returns:
-        (성공여부, 메시지, 이미지)
+        (성공여부, 메시지, 박스가 그려진 이미지)
     """
     if file_path is None:
         return False, "이미지를 업로드해주세요.", None
@@ -694,7 +768,17 @@ def process_target_image(file_path):
         pil_image = Image.open(file_path)
         image_rgb = np.array(pil_image)
         
-        return True, "이미지 로드 완료", image_rgb
+        # RGB를 BGR로 변환 (얼굴 탐지용)
+        image_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+        
+        # 얼굴 탐지 및 박스 그리기
+        success, message, result_image = face_manager.detect_and_draw_faces(image_bgr)
+        
+        if success:
+            return True, message, result_image
+        else:
+            # 얼굴을 찾지 못한 경우 원본 이미지 반환
+            return True, f"이미지 로드 완료\n{message}", image_rgb
         
     except Exception as e:
         logger.error(f"이미지 로드 실패: {e}")
