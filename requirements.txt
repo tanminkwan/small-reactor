@@ -1,0 +1,42 @@
+# Core dependencies
+gradio>=4.0.0
+insightface>=0.7.3
+opencv-python>=4.8.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+
+# CodeFormer dependencies
+codeformer-pip>=0.0.4
+
+# ONNX Runtime (CPU version - 기본)
+#onnxruntime>=1.15.0
+
+# PyTorch (CPU version - 기본)
+#torch>=2.0.0
+#torchvision>=0.15.0
+
+# GPU 지원을 위한 추가 패키지들 (선택적 설치)
+# CUDA 11.x 버전용
+# onnxruntime-gpu>=1.15.0
+# torch>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# torchvision>=0.15.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+
+# CUDA 12.x 버전용
+# onnxruntime-gpu>=1.15.0 --extra-index-url https://aiinfra.pkgs.visualstudio.com/PublicPackages/_packaging/onnxruntime-cuda-12/pypi/simple/
+# torch>=2.0.0+cu121 --index-url https://download.pytorch.org/whl/cu121
+# torchvision>=0.15.0+cu121 --index-url https://download.pytorch.org/whl/cu121
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-asyncio>=0.21.0
+pytest-xdist>=3.0.0
+pytest-html>=3.1.0
+pytest-benchmark>=4.0.0
+
+# Development dependencies
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
+pre-commit>=3.0.0
