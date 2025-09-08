@@ -1,5 +1,3 @@
-# 기존 얼굴 스와핑 코드
-
 import cv2
 import numpy as np
 import insightface
