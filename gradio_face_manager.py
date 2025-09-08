@@ -875,6 +875,39 @@ def update_embedding_choices():
     # 항상 첫 번째 항목을 선택하도록 강제
     return gr.update(choices=choices, value=choices[0] if choices else None)
 
+def delete_result_image():
+    """
+    최종 결과 이미지 파일을 삭제하고 화면을 초기화합니다.
+    
+    Returns:
+        (삭제 성공여부, 메시지, None)
+    """
+    try:
+        # .env에서 출력 경로 가져오기
+        output_path = os.getenv("OUTPUT_PATH", "./outputs")
+        output_dir = Path(output_path)
+        
+        if not output_dir.exists():
+            return False, "출력 폴더가 존재하지 않습니다.", None
+        
+        # 가장 최근 생성된 final_result 파일 찾기
+        result_files = list(output_dir.glob("final_result_*.jpg"))
+        if not result_files:
+            return False, "삭제할 결과 파일이 없습니다.", None
+        
+        # 파일 생성 시간으로 정렬하여 가장 최근 파일 선택
+        latest_file = max(result_files, key=lambda f: f.stat().st_mtime)
+        
+        # 파일 삭제
+        latest_file.unlink()
+        
+        logger.info(f"결과 이미지 파일 삭제 완료: {latest_file}")
+        return True, f"✅ 파일 삭제 완료: {latest_file.name}", None
+        
+    except Exception as e:
+        logger.error(f"파일 삭제 실패: {e}")
+        return False, f"❌ 파일 삭제 실패: {str(e)}", None
+
 def process_target_image(file_path):
     """
     타겟 이미지를 처리하고 얼굴 탐지 결과를 박스로 표시합니다.
@@ -1074,10 +1107,27 @@ def create_interface():
                     )
                     
                     # 최종 결과 이미지 표시
-                    swapped_image = gr.Image(
-                        label="최종 결과",
-                        type="numpy"
-                    )
+                    with gr.Group():
+                        swapped_image = gr.Image(
+                            label="최종 결과",
+                            type="numpy"
+                        )
+                        
+                        # 결과 이미지 삭제 버튼
+                        with gr.Row():
+                            delete_result_btn = gr.Button(
+                                "🗑️ 결과 이미지 삭제",
+                                variant="secondary",
+                                size="sm"
+                            )
+                        
+                        # 삭제 결과 메시지
+                        delete_result_text = gr.Textbox(
+                            label="삭제 결과",
+                            lines=1,
+                            interactive=False,
+                            visible=True
+                        )
         
         with gr.Tab("얼굴 추출"):
             gr.Markdown("## 📸 이미지에서 첫 번째 얼굴 추출")
@@ -1211,6 +1261,13 @@ def create_interface():
             fn=perform_face_swap_wrapper,
             inputs=[target_upload, face_indices_input, source_face_dropdown, codeformer_checkbox, preserve_mouth_checkbox, expand_ratio_slider, scale_x_slider, scale_y_slider, offset_x_slider, offset_y_slider],
             outputs=[swapped_image_state, swap_result_text, swapped_image]
+        )
+        
+        # 결과 이미지 삭제 버튼 클릭 시 처리
+        delete_result_btn.click(
+            fn=lambda: delete_result_image() + (None,),  # 3개 출력을 위해 None 추가
+            inputs=[],
+            outputs=[delete_result_text, delete_result_text, swapped_image]
         )
         
         # embedding 목록 새로고침 시 드롭다운도 업데이트
