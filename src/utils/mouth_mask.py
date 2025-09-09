@@ -17,6 +17,44 @@ def create_mouth_mask(landmarks, image_shape, expand_ratio=0.2, blur_size=0,
     elif len(landmarks) == 68:
         # 68개 모델에서 입 부분: 48-67번 인덱스 
         mouth_points = landmarks[48:68]
+    elif len(landmarks) == 5:
+        # 5개 키포인트만 있는 경우 (kps): [왼쪽 눈, 오른쪽 눈, 코, 왼쪽 입, 오른쪽 입]
+        # 입 부분을 대략적으로 추정
+        left_mouth = landmarks[3]  # 왼쪽 입
+        right_mouth = landmarks[4]  # 오른쪽 입
+        nose = landmarks[2]  # 코
+        
+        # 입 중심점 계산
+        mouth_center = (left_mouth + right_mouth) / 2
+        
+        # 입 크기 추정 (코에서 입까지의 거리 기반)
+        nose_to_mouth = np.linalg.norm(nose - mouth_center)
+        mouth_width = np.linalg.norm(right_mouth - left_mouth)
+        
+        # 타원형 마스크 생성
+        center_x = int(mouth_center[0])
+        center_y = int(mouth_center[1])
+        
+        # 타원 크기 계산
+        semi_axis_x = int(mouth_width * 0.8)  # 입 너비의 80%
+        semi_axis_y = int(nose_to_mouth * 0.6)  # 코-입 거리의 60%
+        
+        # expand_weights 적용
+        scale_x = expand_weights.get('scale_x', 1.0)
+        scale_y = expand_weights.get('scale_y', 1.0)
+        offset_x = expand_weights.get('offset_x', 0)
+        offset_y = expand_weights.get('offset_y', 0)
+        
+        # 최종 중심점과 크기
+        final_center = (center_x + offset_x, center_y + offset_y)
+        final_semi_axis_x = int(semi_axis_x * scale_x * (1 + expand_ratio))
+        final_semi_axis_y = int(semi_axis_y * scale_y * (1 + expand_ratio))
+        
+        # 타원 마스크 생성
+        cv2.ellipse(mask, final_center, (final_semi_axis_x, final_semi_axis_y), 0, 0, 360, 255, -1)
+        
+        print(f"5개 키포인트로 입 마스크 생성 - 중심: {final_center}, 크기: {final_semi_axis_x}x{final_semi_axis_y}")
+        return mask
     else:
         print(f"지원되지 않는 랜드마크 개수: {len(landmarks)}")
         return mask
@@ -78,46 +116,8 @@ def create_mouth_mask(landmarks, image_shape, expand_ratio=0.2, blur_size=0,
     return mask
 
 if __name__ == "__main__":
-
-    INSWAPPER_PATH = r"C:\models\inswapper_128.onnx"
-    BUFFALO_L_PATH = "C:\\"
-
-    source_img = cv2.imread("C:\\images\\f_base.jpg")
-    target_img = cv2.imread("C:\\images\\tongue2.jpg")
-    #target_img = cv2.imread("C:\\images\\b_1.jpg")
-
-    app = FaceAnalysis(name='buffalo_l', root=BUFFALO_L_PATH)
-    app.prepare(ctx_id=-1, det_size=(640, 640))
-    swapper = insightface.model_zoo.get_model(INSWAPPER_PATH)
-
-    # 얼굴 감지
-    source_faces = app.get(source_img)
-    target_faces = app.get(target_img) 
-    source_face = source_faces[0]
-    target_face = target_faces[0]
-
-    # 일반 스와핑 수행
-    result = swapper.get(target_img, target_face, source_face, paste_back=True)
-
-    # 여기서 입 마스크 적용
-    landmarks = target_face.landmark_2d_106  # 또는 landmark_3d_68
-
-
-    #mask = create_mouth_mask(landmarks, target_img.shape)
-    #mask = create_mouth_mask(landmarks, target_img.shape, expand_weights={'scale_x': 4.0})
-    mask = create_mouth_mask(landmarks, target_img.shape, expand_weights={'scale_x': 4.0, 'offset_x': 10, 'offset_y': 10})
-    #
-
-    # 입 부분만 원본으로 교체
-    mouth_mask_bool = mask > 0
-    result[mouth_mask_bool] = target_img[mouth_mask_bool]
-
-
-    # 입 부분만 검은색으로 변경
-    #mouth_mask_bool = mask == 0  # 마스크에서 0인 부분이 입 영역
-    #result[mouth_mask_bool] = [0, 0, 0]  # BGR 형식으로 검은색 (0, 0, 0)
-
-
-    # 결과 이미지를 파일로 저장
-    output_filename = "f_result.jpg"
-    cv2.imwrite(output_filename, result)
+    """
+    테스트 코드 - 실제 사용 시에는 제거하거나 별도 테스트 파일로 분리
+    """
+    print("mouth_mask.py 모듈이 정상적으로 로드되었습니다.")
+    print("create_mouth_mask 함수를 사용하여 입 마스크를 생성할 수 있습니다.")

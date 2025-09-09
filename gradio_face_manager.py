@@ -22,6 +22,7 @@ load_dotenv()
 
 from src.services.buffalo_detector import BuffaloDetector
 from src.utils.config import Config
+from src.utils.mouth_mask import create_mouth_mask
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -95,24 +96,35 @@ class FaceManager:
             # 박스 그리기 (초록색)
             cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
             
-            # 인덱스 텍스트 그리기
+            # 인덱스 텍스트 그리기 (박스 안쪽에 큰 폰트로)
             label = f"{i+1}"
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.8
-            thickness = 2
+            
+            # 박스 크기에 비례한 폰트 크기 계산
+            box_width = x2 - x1
+            box_height = y2 - y1
+            font_scale = min(box_width, box_height) / 100.0  # 박스 크기에 비례
+            font_scale = max(1.5, min(font_scale, 4.0))  # 최소 1.5, 최대 4.0
+            
+            thickness = max(2, int(font_scale))  # 폰트 크기에 비례한 두께
             
             # 텍스트 크기 계산
             (text_width, text_height), baseline = cv2.getTextSize(label, font, font_scale, thickness)
             
-            # 텍스트 배경 박스 그리기
+            # 박스 안쪽 중앙에 텍스트 배치
+            text_x = x1 + (box_width - text_width) // 2
+            text_y = y1 + (box_height + text_height) // 2
+            
+            # 텍스트 배경 박스 그리기 (반투명한 흰색)
+            padding = 5
             cv2.rectangle(result_image, 
-                         (x1, y1 - text_height - 10), 
-                         (x1 + text_width + 10, y1), 
-                         (0, 255, 0), -1)
+                         (text_x - padding, text_y - text_height - padding), 
+                         (text_x + text_width + padding, text_y + padding), 
+                         (255, 255, 255), -1)
             
             # 텍스트 그리기 (검은색)
             cv2.putText(result_image, label, 
-                       (x1 + 5, y1 - 5), 
+                       (text_x, text_y), 
                        font, font_scale, (0, 0, 0), thickness)
         
         return result_image
@@ -533,11 +545,103 @@ class FaceManager:
         except Exception as e:
             logger.error(f"CodeFormer 복원 실패: {e}")
             return False, f"CodeFormer 복원 실패: {str(e)}", None
+    
+    def apply_mouth_preservation(self, processed_image: np.ndarray, original_image: np.ndarray, face_indices: str, mouth_settings: dict) -> Tuple[bool, str, np.ndarray]:
+        """
+        CodeFormer 복원 후에 입 원본유지를 적용합니다.
+        
+        Args:
+            processed_image: 처리된 이미지 (BGR)
+            original_image: 원본 이미지 (BGR)
+            face_indices: 얼굴 인덱스
+            mouth_settings: 입 마스크 설정
+            
+        Returns:
+            (성공여부, 메시지, 입 원본유지가 적용된 이미지)
+        """
+        try:
+            # 얼굴 탐지
+            faces = self.detector.detect_faces(processed_image)
+            if not faces:
+                return False, "이미지에서 얼굴을 찾을 수 없습니다.", None
+            
+            # 얼굴 인덱스 파싱
+            if face_indices.strip():
+                indices = [int(x.strip()) - 1 for x in face_indices.split(',')]
+                indices = [i for i in indices if 0 <= i < len(faces)]
+                if not indices:
+                    return False, "유효한 얼굴 인덱스가 없습니다.", None
+            else:
+                indices = list(range(len(faces)))
+            
+            # 기본 설정값
+            expand_ratio = mouth_settings.get('expand_ratio', 0.2)
+            expand_weights = {
+                'scale_x': mouth_settings.get('scale_x', 1.0),
+                'scale_y': mouth_settings.get('scale_y', 1.0),
+                'offset_x': mouth_settings.get('offset_x', 0),
+                'offset_y': mouth_settings.get('offset_y', 0)
+            }
+            
+            # 결과 이미지 초기화
+            result_image = processed_image.copy()
+            
+            # 선택된 얼굴들에 대해 입 마스크 적용
+            for i, face_idx in enumerate(indices):
+                try:
+                    face = faces[face_idx]
+                    
+                    # InsightFace Face 객체에서 랜드마크 가져오기
+                    landmarks = getattr(face, 'landmark_2d_106', None)
+                    
+                    # landmark_2d_106이 없으면 landmark_3d_68 시도
+                    if landmarks is None:
+                        landmarks = getattr(face, 'landmark_3d_68', None)
+                        if landmarks is not None:
+                            logger.info(f"얼굴 {i+1}에서 landmark_3d_68 사용 (포인트 수: {len(landmarks)})")
+                    
+                    # 여전히 없으면 kps 시도 (5개 포인트)
+                    if landmarks is None:
+                        landmarks = getattr(face, 'kps', None)
+                        if landmarks is not None:
+                            logger.info(f"얼굴 {i+1}에서 kps 사용 (포인트 수: {len(landmarks)})")
+                    
+                    if landmarks is not None and len(landmarks) >= 5:
+                        # 입 마스크 생성
+                        mouth_mask = create_mouth_mask(
+                            landmarks, 
+                            result_image.shape, 
+                            expand_ratio=expand_ratio,
+                            expand_weights=expand_weights
+                        )
+                        
+                        # 입 부분을 원본으로 복원
+                        mouth_mask_bool = mouth_mask > 0
+                        result_image[mouth_mask_bool] = original_image[mouth_mask_bool]
+                        
+                        logger.info(f"얼굴 {i+1} 입 원본유지 적용 완료 (랜드마크 수: {len(landmarks)})")
+                    else:
+                        logger.warning(f"얼굴 {i+1}의 충분한 랜드마크를 찾을 수 없습니다 (현재: {len(landmarks) if landmarks is not None else 0}개)")
+                        
+                except Exception as e:
+                    logger.error(f"얼굴 {i+1} 입 원본유지 적용 실패: {e}")
+                    continue
+            
+            # BGR을 RGB로 변환
+            result_image_rgb = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
+            
+            message = f"입 원본유지 적용 완료!\n적용된 얼굴: {len(indices)}개"
+            
+            return True, message, result_image_rgb
+            
+        except Exception as e:
+            logger.error(f"입 원본유지 적용 실패: {e}")
+            return False, f"입 원본유지 적용 실패: {str(e)}", None
 
 # 전역 FaceManager 인스턴스
 face_manager = FaceManager()
 
-def perform_face_swap_with_optional_codeformer(file_path, face_indices, source_face_name, use_codeformer):
+def perform_face_swap_with_optional_codeformer(file_path, face_indices, source_face_name, use_codeformer, preserve_mouth=False, mouth_settings=None):
     """
     얼굴 교체를 수행하고, 선택적으로 CodeFormer 복원도 수행합니다.
     
@@ -546,6 +650,8 @@ def perform_face_swap_with_optional_codeformer(file_path, face_indices, source_f
         face_indices: 교체할 얼굴 인덱스
         source_face_name: 소스 얼굴 이름
         use_codeformer: CodeFormer 복원 사용 여부
+        preserve_mouth: 입 원본유지 여부
+        mouth_settings: 입 마스크 설정
         
     Returns:
         (최종 이미지, 메시지, 최종 이미지)
@@ -597,6 +703,27 @@ def perform_face_swap_with_optional_codeformer(file_path, face_indices, source_f
             except Exception as e:
                 logger.error(f"CodeFormer 복원 실패: {e}")
                 final_message = f"{message}\nCodeFormer 복원 실패: {str(e)}"
+        
+        # 입 원본유지가 체크되어 있으면 CodeFormer 복원 후에 수행
+        if preserve_mouth and mouth_settings:
+            try:
+                # 최종 이미지를 BGR로 변환 (입 원본유지용)
+                final_image_bgr = cv2.cvtColor(final_image, cv2.COLOR_RGB2BGR)
+                
+                # 입 원본유지 적용
+                mouth_success, mouth_message, mouth_restored_image_rgb = face_manager.apply_mouth_preservation(
+                    final_image_bgr, image_bgr, face_indices, mouth_settings
+                )
+                
+                if mouth_success:
+                    final_image = mouth_restored_image_rgb
+                    final_message = f"{final_message}\n{mouth_message}"
+                else:
+                    final_message = f"{final_message}\n입 원본유지 실패: {mouth_message}"
+                    
+            except Exception as e:
+                logger.error(f"입 원본유지 실패: {e}")
+                final_message = f"{final_message}\n입 원본유지 실패: {str(e)}"
         
         # 최종 결과 이미지 파일로 저장
         if final_image is not None:
@@ -748,6 +875,39 @@ def update_embedding_choices():
     # 항상 첫 번째 항목을 선택하도록 강제
     return gr.update(choices=choices, value=choices[0] if choices else None)
 
+def delete_result_image():
+    """
+    최종 결과 이미지 파일을 삭제하고 화면을 초기화합니다.
+    
+    Returns:
+        (삭제 성공여부, 메시지, None)
+    """
+    try:
+        # .env에서 출력 경로 가져오기
+        output_path = os.getenv("OUTPUT_PATH", "./outputs")
+        output_dir = Path(output_path)
+        
+        if not output_dir.exists():
+            return False, "출력 폴더가 존재하지 않습니다.", None
+        
+        # 가장 최근 생성된 final_result 파일 찾기
+        result_files = list(output_dir.glob("final_result_*.jpg"))
+        if not result_files:
+            return False, "삭제할 결과 파일이 없습니다.", None
+        
+        # 파일 생성 시간으로 정렬하여 가장 최근 파일 선택
+        latest_file = max(result_files, key=lambda f: f.stat().st_mtime)
+        
+        # 파일 삭제
+        latest_file.unlink()
+        
+        logger.info(f"결과 이미지 파일 삭제 완료: {latest_file}")
+        return True, f"✅ 파일 삭제 완료: {latest_file.name}", None
+        
+    except Exception as e:
+        logger.error(f"파일 삭제 실패: {e}")
+        return False, f"❌ 파일 삭제 실패: {str(e)}", None
+
 def process_target_image(file_path):
     """
     타겟 이미지를 처리하고 얼굴 탐지 결과를 박스로 표시합니다.
@@ -869,6 +1029,63 @@ def create_interface():
                         info="체크하면 얼굴 교체 후 자동으로 CodeFormer 복원도 수행됩니다"
                     )
                     
+                    # 입 원본유지 체크박스
+                    preserve_mouth_checkbox = gr.Checkbox(
+                        label="입 원본유지",
+                        value=False,
+                        info="체크하면 얼굴 교체 후 입과 입주변을 원본 이미지로 복원합니다"
+                    )
+                    
+                    # 입 마스크 설정 (조건부 표시)
+                    with gr.Group(visible=False) as mouth_settings_group:
+                        gr.Markdown("### 입 마스크 설정")
+                        
+                        with gr.Row():
+                            expand_ratio_slider = gr.Slider(
+                                label="확장 비율 (expand_ratio)",
+                                minimum=0.0,
+                                maximum=1.0,
+                                value=0.2,
+                                step=0.1,
+                                info="입 영역 확장 정도"
+                            )
+                        
+                        with gr.Row():
+                            scale_x_slider = gr.Slider(
+                                label="가로 스케일 (scale_x)",
+                                minimum=0.1,
+                                maximum=5.0,
+                                value=1.0,
+                                step=0.1,
+                                info="가로 방향 확장 배율"
+                            )
+                            scale_y_slider = gr.Slider(
+                                label="세로 스케일 (scale_y)",
+                                minimum=0.1,
+                                maximum=5.0,
+                                value=1.0,
+                                step=0.1,
+                                info="세로 방향 확장 배율"
+                            )
+                        
+                        with gr.Row():
+                            offset_x_slider = gr.Slider(
+                                label="가로 오프셋 (offset_x)",
+                                minimum=-50,
+                                maximum=50,
+                                value=0,
+                                step=1,
+                                info="가로 방향 이동 픽셀"
+                            )
+                            offset_y_slider = gr.Slider(
+                                label="세로 오프셋 (offset_y)",
+                                minimum=-50,
+                                maximum=50,
+                                value=0,
+                                step=1,
+                                info="세로 방향 이동 픽셀"
+                            )
+                    
                     # 얼굴 교체 버튼
                     swap_btn = gr.Button("얼굴 변경", variant="primary")
                     
@@ -890,10 +1107,27 @@ def create_interface():
                     )
                     
                     # 최종 결과 이미지 표시
-                    swapped_image = gr.Image(
-                        label="최종 결과",
-                        type="numpy"
-                    )
+                    with gr.Group():
+                        swapped_image = gr.Image(
+                            label="최종 결과",
+                            type="numpy"
+                        )
+                        
+                        # 결과 이미지 삭제 버튼
+                        with gr.Row():
+                            delete_result_btn = gr.Button(
+                                "🗑️ 결과 이미지 삭제",
+                                variant="secondary",
+                                size="sm"
+                            )
+                        
+                        # 삭제 결과 메시지
+                        delete_result_text = gr.Textbox(
+                            label="삭제 결과",
+                            lines=1,
+                            interactive=False,
+                            visible=True
+                        )
         
         with gr.Tab("얼굴 추출"):
             gr.Markdown("## 📸 이미지에서 첫 번째 얼굴 추출")
@@ -986,10 +1220,25 @@ def create_interface():
             success, message, image = process_target_image(file_path)
             return success, message, image
         
-        def perform_face_swap_wrapper(file_path, face_indices, source_face_name, use_codeformer):
+        def toggle_mouth_settings(checked):
+            """입 원본유지 체크박스 상태에 따라 설정 그룹 표시/숨김"""
+            return gr.update(visible=checked)
+        
+        def perform_face_swap_wrapper(file_path, face_indices, source_face_name, use_codeformer, preserve_mouth, expand_ratio, scale_x, scale_y, offset_x, offset_y):
             """얼굴 교체 + CodeFormer 통합 수행 래퍼"""
+            # 입 마스크 설정 구성
+            mouth_settings = None
+            if preserve_mouth:
+                mouth_settings = {
+                    'expand_ratio': expand_ratio,
+                    'scale_x': scale_x,
+                    'scale_y': scale_y,
+                    'offset_x': offset_x,
+                    'offset_y': offset_y
+                }
+            
             final_image, message, result_image = perform_face_swap_with_optional_codeformer(
-                file_path, face_indices, source_face_name, use_codeformer
+                file_path, face_indices, source_face_name, use_codeformer, preserve_mouth, mouth_settings
             )
             return final_image, message, result_image  # 첫 번째는 State용, 세 번째는 표시용
         
@@ -1000,11 +1249,25 @@ def create_interface():
             outputs=[gr.State(), swap_result_text, original_image]
         )
         
+        # 입 원본유지 체크박스 변경 시 설정 그룹 표시/숨김
+        preserve_mouth_checkbox.change(
+            fn=toggle_mouth_settings,
+            inputs=[preserve_mouth_checkbox],
+            outputs=[mouth_settings_group]
+        )
+        
         # 얼굴 교체 버튼 클릭 시 처리 (CodeFormer 포함)
         swap_btn.click(
             fn=perform_face_swap_wrapper,
-            inputs=[target_upload, face_indices_input, source_face_dropdown, codeformer_checkbox],
+            inputs=[target_upload, face_indices_input, source_face_dropdown, codeformer_checkbox, preserve_mouth_checkbox, expand_ratio_slider, scale_x_slider, scale_y_slider, offset_x_slider, offset_y_slider],
             outputs=[swapped_image_state, swap_result_text, swapped_image]
+        )
+        
+        # 결과 이미지 삭제 버튼 클릭 시 처리
+        delete_result_btn.click(
+            fn=lambda: delete_result_image() + (None,),  # 3개 출력을 위해 None 추가
+            inputs=[],
+            outputs=[delete_result_text, delete_result_text, swapped_image]
         )
         
         # embedding 목록 새로고침 시 드롭다운도 업데이트

@@ -8,6 +8,7 @@ Face Swap Application의 API 문서입니다.
 - [Interfaces](#interfaces)
 - [Configuration](#configuration)
 - [Error Handling](#error-handling)
+- [Latest Features](#latest-features)
 
 ## 🔧 Core Services
 
@@ -549,5 +550,173 @@ logging.basicConfig(
 )
 ```
 
+## 🆕 Latest Features
+
+### Mouth Mask Utility
+
+#### `create_mouth_mask(landmarks, image_shape, expand_ratio=0.2, blur_size=0, expand_weights={'scale_x': 1.0, 'scale_y': 1.0, 'offset_x': 0, 'offset_y': 0})`
+
+다양한 랜드마크 포인트 수를 지원하는 입 마스크를 생성합니다.
+
+**Parameters:**
+- `landmarks` (np.ndarray): 얼굴 랜드마크 포인트 (106, 68, 또는 5개)
+- `image_shape` (tuple): 이미지 크기 (height, width, channels)
+- `expand_ratio` (float): 마스크 확장 비율 (기본값: 0.2)
+- `blur_size` (int): 블러 크기 (기본값: 0)
+- `expand_weights` (dict): 마스크 크기 및 위치 조정 가중치
+
+**Returns:**
+- `np.ndarray`: 입 마스크 (uint8, 0-255)
+
+**Supported Landmark Types:**
+- **106포인트**: `landmarks[52:72]` - 정확한 입 영역 마스킹
+- **68포인트**: `landmarks[48:68]` - 표준 얼굴 랜드마크 지원
+- **5포인트**: `[왼쪽 눈, 오른쪽 눈, 코, 왼쪽 입, 오른쪽 입]` - 타원형 마스크 생성
+
+**Example:**
+```python
+from src.utils.mouth_mask import create_mouth_mask
+
+# 106포인트 랜드마크로 입 마스크 생성
+mouth_mask = create_mouth_mask(
+    landmarks=face.landmark_2d_106,
+    image_shape=image.shape,
+    expand_ratio=0.2,
+    expand_weights={
+        'scale_x': 1.0,
+        'scale_y': 1.0,
+        'offset_x': 0,
+        'offset_y': 0
+    }
+)
+```
+
+### FaceManager - Mouth Preservation
+
+#### `apply_mouth_preservation(processed_image: np.ndarray, original_image: np.ndarray, face_indices: str, mouth_settings: dict) -> Tuple[bool, str, np.ndarray]`
+
+CodeFormer 복원 후에 입 원본유지를 적용합니다.
+
+**Parameters:**
+- `processed_image` (np.ndarray): 처리된 이미지 (BGR)
+- `original_image` (np.ndarray): 원본 이미지 (BGR)
+- `face_indices` (str): 얼굴 인덱스 (쉼표로 구분)
+- `mouth_settings` (dict): 입 마스크 설정
+
+**Returns:**
+- `Tuple[bool, str, np.ndarray]`: (성공여부, 메시지, 입 원본유지가 적용된 이미지)
+
+**Mouth Settings:**
+```python
+mouth_settings = {
+    'expand_ratio': 0.2,    # 마스크 확장 비율
+    'scale_x': 1.0,         # 가로 스케일링
+    'scale_y': 1.0,         # 세로 스케일링
+    'offset_x': 0,          # 가로 오프셋
+    'offset_y': 0           # 세로 오프셋
+}
+```
+
+**Example:**
+```python
+# 입 원본유지 적용
+success, message, result = face_manager.apply_mouth_preservation(
+    processed_image=enhanced_image,
+    original_image=original_image,
+    face_indices="1,2,3",
+    mouth_settings={
+        'expand_ratio': 0.3,
+        'scale_x': 1.2,
+        'scale_y': 1.1,
+        'offset_x': 5,
+        'offset_y': -2
+    }
+)
+```
+
+### Result Image Management
+
+#### `delete_result_image() -> Tuple[bool, str, None]`
+
+최종 결과 이미지 파일을 삭제하고 화면을 초기화합니다.
+
+**Returns:**
+- `Tuple[bool, str, None]`: (삭제 성공여부, 메시지, None)
+
+**Features:**
+- 가장 최근 생성된 `final_result_*.jpg` 파일 자동 선택
+- 파일 생성 시간으로 정렬하여 최신 파일 삭제
+- 삭제 후 화면 자동 초기화
+- 성공/실패 상태 메시지 반환
+
+**Example:**
+```python
+# 결과 이미지 삭제
+success, message, _ = delete_result_image()
+if success:
+    print(f"삭제 완료: {message}")
+else:
+    print(f"삭제 실패: {message}")
+```
+
+### Enhanced Face Box Drawing
+
+#### `draw_face_boxes(image: np.ndarray, faces: List[Face]) -> np.ndarray`
+
+이미지에 얼굴 박스와 스마트 인덱스를 그립니다.
+
+**Parameters:**
+- `image` (np.ndarray): 입력 이미지 (BGR)
+- `faces` (List[Face]): 탐지된 얼굴 리스트
+
+**Returns:**
+- `np.ndarray`: 박스와 인덱스가 그려진 이미지 (BGR)
+
+**Features:**
+- **스마트 인덱싱**: 박스 안쪽에 큰 폰트로 번호 표시
+- **적응형 크기**: 박스 크기에 비례한 폰트 크기 (1.5~4.0)
+- **가독성 향상**: 흰색 배경과 검은색 텍스트로 명확한 대비
+- **정확한 배치**: 박스 중앙에 정확히 배치
+
+**Example:**
+```python
+# 얼굴 박스와 인덱스 그리기
+result_image = face_manager.draw_face_boxes(image, faces)
+```
+
+### Processing Order Optimization
+
+#### New Processing Flow
+
+**Previous Order:**
+1. 얼굴 교체 (Swap)
+2. 입 원본유지 (Mouth Preservation)
+3. CodeFormer 복원 (Enhancement)
+
+**Current Order:**
+1. 얼굴 교체 (Swap)
+2. CodeFormer 복원 (Enhancement)
+3. 입 원본유지 (Mouth Preservation)
+
+**Benefits:**
+- **더 나은 품질**: CodeFormer로 먼저 복원한 후 입 부분만 선택적으로 원본으로 복구
+- **자연스러운 결과**: CodeFormer 복원의 이점을 유지하면서 입 부분만 원본 유지
+- **유연성**: 각 단계를 독립적으로 제어 가능
+
+**Implementation:**
+```python
+# 새로운 처리 순서
+def perform_face_swap_with_optional_codeformer(...):
+    # 1. 얼굴 교체
+    success, message, swapped_image = face_manager.swap_faces(...)
+    
+    # 2. CodeFormer 복원 (선택사항)
+    if use_codeformer:
+        success, message, enhanced_image = face_manager.enhance_faces_with_codeformer(...)
+    
+    # 3. 입 원본유지 (선택사항)
+    if preserve_mouth:
+        success, message, final_image = face_manager.apply_mouth_preservation(...)
+```
 
 
