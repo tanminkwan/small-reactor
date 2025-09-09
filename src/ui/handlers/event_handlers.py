@@ -97,6 +97,13 @@ class EventHandlers:
             inputs=[],
             outputs=[tab.source_face_dropdown]
         )
+        
+        # 원본 이미지의 얼굴 박스 클릭 시 인덱스 추가/제거
+        tab.original_image.select(
+            fn=tab.handle_face_click,
+            inputs=[tab.face_indices_input, tab.original_image],
+            outputs=[tab.face_indices_input]
+        )
     
     def setup_embedding_list_handlers(self, tab: EmbeddingListTab) -> None:
         """

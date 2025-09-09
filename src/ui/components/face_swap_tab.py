@@ -51,7 +51,8 @@ class FaceSwapTab:
                     self.face_indices_input = gr.Textbox(
                         label="교체할 얼굴 인덱스 (쉼표로 구분, 비워두면 모든 얼굴)",
                         placeholder="예: 1,3,5 또는 비워두기",
-                        value=""
+                        value="",
+                        info="💡 원본 이미지의 얼굴 박스를 클릭하면 자동으로 인덱스가 추가/제거됩니다"
                     )
                     
                     # 바꿀 얼굴 선택 (드롭다운과 새로고침 버튼)
@@ -326,3 +327,71 @@ class FaceSwapTab:
         """
         success, message = self.file_manager.delete_latest_result_image()
         return success, message, None
+    
+    def handle_face_click(self, evt: gr.SelectData, current_indices: str, original_image: np.ndarray) -> str:
+        """
+        얼굴 박스 클릭 시 인덱스를 추가/제거합니다.
+        
+        Args:
+            evt: Gradio SelectData 이벤트 (좌표값 포함)
+            current_indices: 현재 인덱스 문자열
+            original_image: 원본 이미지 (얼굴 탐지용)
+            
+        Returns:
+            업데이트된 인덱스 문자열
+        """
+        if evt.index is None or original_image is None:
+            return current_indices
+        
+        try:
+            # 클릭한 좌표 (x, y)
+            click_x, click_y = evt.index[0], evt.index[1]
+            
+            # 원본 이미지를 BGR로 변환 (얼굴 탐지용)
+            import cv2
+            if len(original_image.shape) == 3 and original_image.shape[2] == 3:
+                # RGB를 BGR로 변환
+                image_bgr = cv2.cvtColor(original_image, cv2.COLOR_RGB2BGR)
+            else:
+                image_bgr = original_image
+            
+            # 얼굴 탐지
+            faces = self.face_manager.detector.detect_faces(image_bgr)
+            if not faces:
+                return current_indices
+            
+            # 클릭한 좌표가 포함된 얼굴 찾기
+            clicked_face_index = None
+            for i, face in enumerate(faces):
+                bbox = face.bbox
+                x1, y1, x2, y2 = map(int, bbox)
+                
+                # 클릭한 좌표가 이 얼굴 박스 안에 있는지 확인
+                if x1 <= click_x <= x2 and y1 <= click_y <= y2:
+                    clicked_face_index = i + 1  # 1-based 인덱스
+                    break
+            
+            if clicked_face_index is None:
+                return current_indices
+            
+            # 현재 인덱스들을 파싱
+            if current_indices.strip():
+                indices = [idx.strip() for idx in current_indices.split(',')]
+            else:
+                indices = []
+            
+            clicked_index_str = str(clicked_face_index)
+            
+            # 클릭된 인덱스가 이미 있으면 제거, 없으면 추가
+            if clicked_index_str in indices:
+                indices.remove(clicked_index_str)
+            else:
+                indices.append(clicked_index_str)
+            
+            # 정렬하여 반환
+            indices.sort(key=int)
+            return ','.join(indices)
+            
+        except Exception as e:
+            # 오류 발생 시 현재 인덱스 그대로 반환
+            return current_indices
