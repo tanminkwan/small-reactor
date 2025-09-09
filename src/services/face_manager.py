@@ -417,7 +417,7 @@ class FaceManager:
                         #mouth_mask_bool = mouth_mask > 0
                         #result_image[mouth_mask_bool] = original_image[mouth_mask_bool]
                        
-                        result_image = smooth_blend_mouth(result_image, result_image, mouth_mask, "poisson")  # 원본 마스크 사용
+                        result_image_poisson = smooth_blend_mouth(result_image, original_image, mouth_mask, "poisson")  # 원본 마스크 사용
                         
                         self._logger.info(f"얼굴 {i+1} 입 원본유지 적용 완료 (랜드마크 수: {len(landmarks)})")
                     else:
@@ -428,7 +428,7 @@ class FaceManager:
                     continue
             
             # BGR을 RGB로 변환
-            result_image_rgb = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
+            result_image_rgb = cv2.cvtColor(result_image if result_image_poisson is None else result_image_poisson, cv2.COLOR_BGR2RGB)
             
             message = f"입 원본유지 적용 완료!\n적용된 얼굴: {len(indices)}개"
             
