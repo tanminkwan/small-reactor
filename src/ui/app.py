@@ -119,3 +119,4 @@ class FaceManagerApp:
                 "event_handlers": self.event_handlers is not None
             }
         }
+

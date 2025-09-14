@@ -83,3 +83,4 @@ class UIHelpers:
             그룹 표시/숨김 설정
         """
         return gr.update(visible=checked)
+

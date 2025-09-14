@@ -118,3 +118,4 @@ class DIContainer:
             "file_manager_initialized": self._file_manager is not None,
             "all_services_initialized": self.is_initialized()
         }
+
