@@ -55,8 +55,8 @@ class EventHandlers:
         # 타겟 이미지 업로드 시 처리
         tab.target_upload.change(
             fn=tab.process_target_image,
-            inputs=[tab.target_upload],
-            outputs=[gr.State(), tab.swap_result_text, tab.original_image]
+            inputs=[tab.target_upload, tab.face_indices_input],
+            outputs=[gr.State(), tab.swap_result_text, tab.original_image, tab.face_indices_input]
         )
         
         # 입 원본유지 체크박스 변경 시 설정 그룹 표시/숨김

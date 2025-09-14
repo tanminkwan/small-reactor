@@ -179,18 +179,20 @@ class FaceSwapTab:
         
         return tab
     
-    def process_target_image(self, file_path: str) -> Tuple[bool, str, Optional[np.ndarray]]:
+    def process_target_image(self, file_path: str, current_indices: str = "") -> Tuple[bool, str, Optional[np.ndarray], str]:
         """
         타겟 이미지를 처리하고 얼굴 탐지 결과를 박스로 표시합니다.
+        인덱스 검증도 함께 수행합니다.
         
         Args:
             file_path: 파일 경로
+            current_indices: 현재 얼굴 인덱스
             
         Returns:
-            (성공여부, 메시지, 박스가 그려진 이미지)
+            (성공여부, 메시지, 박스가 그려진 이미지, 검증된 인덱스)
         """
         if file_path is None:
-            return False, "이미지를 업로드해주세요.", None
+            return False, "이미지를 업로드해주세요.", None, ""
         
         try:
             from PIL import Image
@@ -205,14 +207,17 @@ class FaceSwapTab:
             # 얼굴 탐지 및 박스 그리기
             success, message, result_image = self.face_manager.detect_and_draw_faces(image_bgr)
             
+            # 인덱스 검증 및 초기화
+            validated_indices = self.validate_and_clear_indices(current_indices, image_rgb)
+            
             if success:
-                return True, message, result_image
+                return True, message, result_image, validated_indices
             else:
                 # 얼굴을 찾지 못한 경우 원본 이미지 반환
-                return True, f"이미지 로드 완료\n{message}", image_rgb
+                return True, f"이미지 로드 완료\n{message}", image_rgb, validated_indices
             
         except Exception as e:
-            return False, f"이미지를 로드할 수 없습니다: {str(e)}", None
+            return False, f"이미지를 로드할 수 없습니다: {str(e)}", None, ""
     
     def perform_face_swap_with_optional_codeformer(
         self, 
@@ -395,3 +400,55 @@ class FaceSwapTab:
         except Exception as e:
             # 오류 발생 시 현재 인덱스 그대로 반환
             return current_indices
+    
+    def validate_and_clear_indices(self, current_indices: str, original_image: np.ndarray) -> str:
+        """
+        현재 인덱스가 원본 이미지의 얼굴 수와 일치하는지 검증하고,
+        유효하지 않은 인덱스가 있으면 초기화합니다.
+        
+        Args:
+            current_indices: 현재 인덱스 문자열
+            original_image: 원본 이미지
+            
+        Returns:
+            검증된 인덱스 문자열
+        """
+        if not current_indices.strip() or original_image is None:
+            return ""
+        
+        try:
+            # 원본 이미지를 BGR로 변환 (얼굴 탐지용)
+            import cv2
+            if len(original_image.shape) == 3 and original_image.shape[2] == 3:
+                # RGB를 BGR로 변환
+                image_bgr = cv2.cvtColor(original_image, cv2.COLOR_RGB2BGR)
+            else:
+                image_bgr = original_image
+            
+            # 얼굴 탐지
+            faces = self.face_manager.detector.detect_faces(image_bgr)
+            if not faces:
+                return ""  # 얼굴이 없으면 인덱스 초기화
+            
+            max_face_index = len(faces)
+            
+            # 현재 인덱스들을 파싱
+            indices = [idx.strip() for idx in current_indices.split(',')]
+            valid_indices = []
+            
+            for idx in indices:
+                try:
+                    idx_num = int(idx)
+                    if 1 <= idx_num <= max_face_index:
+                        valid_indices.append(idx)
+                except ValueError:
+                    # 숫자가 아닌 값은 무시
+                    continue
+            
+            # 유효한 인덱스들을 정렬하여 반환
+            valid_indices.sort(key=int)
+            return ','.join(valid_indices)
+            
+        except Exception as e:
+            # 오류 발생 시 인덱스 초기화
+            return ""
