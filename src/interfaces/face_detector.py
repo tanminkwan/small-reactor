@@ -20,7 +20,8 @@ class Face:
         embedding: np.ndarray,
         det_score: float,
         age: Optional[int] = None,
-        gender: Optional[int] = None
+        gender: Optional[int] = None,
+        landmark_2d_106: Optional[np.ndarray] = None
     ):
         """
         Args:
@@ -30,6 +31,7 @@ class Face:
             det_score: 탐지 점수
             age: 나이 (선택사항)
             gender: 성별 (선택사항)
+            landmark_2d_106: 106개 2D 랜드마크 (선택사항)
         """
         self.bbox = bbox
         self.kps = kps
@@ -37,6 +39,7 @@ class Face:
         self.det_score = det_score
         self.age = age
         self.gender = gender
+        self.landmark_2d_106 = landmark_2d_106
     
     def __repr__(self) -> str:
         return f"Face(bbox={self.bbox}, det_score={self.det_score:.3f})"

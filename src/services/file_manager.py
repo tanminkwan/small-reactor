@@ -205,6 +205,38 @@ class FileManager:
             self._logger.error(f"파일 삭제 실패: {e}")
             return False, f"❌ 파일 삭제 실패: {str(e)}"
     
+    def get_next_result_image(self) -> Tuple[bool, str, Optional[np.ndarray]]:
+        """
+        다음으로 삭제될 결과 이미지를 가져옵니다.
+        
+        Returns:
+            (성공여부, 메시지, 이미지 배열)
+        """
+        try:
+            output_dir = Path(self.output_path)
+            
+            if not output_dir.exists():
+                return False, "출력 폴더가 존재하지 않습니다.", None
+            
+            # 가장 최근 생성된 final_result 파일 찾기
+            result_files = list(output_dir.glob("final_result_*.jpg"))
+            if not result_files:
+                return False, "표시할 결과 파일이 없습니다.", None
+            
+            # 파일 생성 시간으로 정렬하여 가장 최근 파일 선택
+            latest_file = max(result_files, key=lambda f: f.stat().st_mtime)
+            
+            # 이미지 로드
+            image = Image.open(latest_file)
+            image_array = np.array(image)
+            
+            self._logger.info(f"다음 삭제 대상 이미지 로드: {latest_file}")
+            return True, f"다음 삭제 대상: {latest_file.name}", image_array
+            
+        except Exception as e:
+            self._logger.error(f"이미지 로드 실패: {e}")
+            return False, f"❌ 이미지 로드 실패: {str(e)}", None
+    
     def get_embedding_list_display(self) -> str:
         """
         embedding 목록을 표시용 문자열로 변환합니다.

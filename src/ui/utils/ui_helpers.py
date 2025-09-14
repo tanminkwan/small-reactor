@@ -72,15 +72,45 @@ class UIHelpers:
         return gr.update(choices=choices, value=choices[0] if choices else None)
     
     @staticmethod
-    def toggle_mouth_settings(checked: bool) -> gr.Group:
+    def toggle_mouth_settings(checked: bool, method: str = "chin_region") -> gr.Group:
         """
-        입 원본유지 체크박스 상태에 따라 설정 그룹 표시/숨김
+        입 원본유지 체크박스 상태와 방식에 따라 설정 그룹 표시/숨김
+        
+        Args:
+            checked: 체크박스 상태
+            method: 입 원본유지 방식 ("ellipse" 또는 "chin_region")
+            
+        Returns:
+            그룹 표시/숨김 설정
+        """
+        # 체크되어 있고 타원 마스크 방식일 때만 설정 그룹 표시
+        return gr.update(visible=checked and method == "ellipse")
+    
+    @staticmethod
+    def toggle_mouth_settings_by_method(checked: bool, method: str) -> gr.Group:
+        """
+        입 원본유지 체크박스와 방식에 따라 설정 그룹 표시/숨김
+        
+        Args:
+            checked: 체크박스 상태
+            method: 입 원본유지 방식 ("ellipse" 또는 "chin_region")
+            
+        Returns:
+            그룹 표시/숨김 설정
+        """
+        # 체크되어 있고 타원 마스크 방식일 때만 설정 그룹 표시
+        return gr.update(visible=checked and method == "ellipse")
+    
+    @staticmethod
+    def toggle_mouth_preserve_method(checked: bool) -> gr.Radio:
+        """
+        입 원본유지 체크박스 상태에 따라 방식 선택 영역 표시/숨김
         
         Args:
             checked: 체크박스 상태
             
         Returns:
-            그룹 표시/숨김 설정
+            라디오 버튼 표시/숨김 설정
         """
         return gr.update(visible=checked)
 

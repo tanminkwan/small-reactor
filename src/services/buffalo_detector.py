@@ -125,13 +125,27 @@ class BuffaloDetector(IFaceDetector):
         Returns:
             Face 객체
         """
+        # 106개 랜드마크 추출 시도
+        landmark_2d_106 = None
+        try:
+            # InsightFace에서 106개 랜드마크 추출
+            if hasattr(insight_face, 'landmark_2d_106'):
+                landmark_2d_106 = insight_face.landmark_2d_106
+            elif hasattr(insight_face, 'landmark'):
+                # landmark 속성이 있다면 106개인지 확인
+                if len(insight_face.landmark) >= 106:
+                    landmark_2d_106 = insight_face.landmark[:106]
+        except Exception as e:
+            self._logger.debug(f"106개 랜드마크 추출 실패: {e}")
+        
         return Face(
             bbox=insight_face.bbox.tolist(),
             kps=insight_face.kps,
             embedding=insight_face.embedding,
             det_score=float(insight_face.det_score),
             age=getattr(insight_face, 'age', None),
-            gender=getattr(insight_face, 'gender', None)
+            gender=getattr(insight_face, 'gender', None),
+            landmark_2d_106=landmark_2d_106
         )
     
     def _sort_faces_by_position(self, faces: List[Face]) -> List[Face]:

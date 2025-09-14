@@ -15,7 +15,7 @@ from typing import List, Tuple, Optional
 from src.services.buffalo_detector import BuffaloDetector
 from src.services.codeformer_enhancer import CodeFormerEnhancer
 from src.utils.config import Config
-from src.utils.mouth_mask import create_mouth_mask, smooth_blend_mouth
+from src.utils.mouth_mask import create_mouth_mask, smooth_blend_mouth, create_chin_region_mask
 
 
 class FaceManager:
@@ -344,7 +344,7 @@ class FaceManager:
             self._logger.error(f"CodeFormer 복원 실패: {e}")
             return False, f"CodeFormer 복원 실패: {str(e)}", None
     
-    def apply_mouth_preservation(self, processed_image: np.ndarray, original_image: np.ndarray, face_indices: str, mouth_settings: dict) -> Tuple[bool, str, np.ndarray]:
+    def apply_mouth_preservation(self, processed_image: np.ndarray, original_image: np.ndarray, face_indices: str, mouth_settings: dict, mouth_preserve_method: str = "ellipse") -> Tuple[bool, str, np.ndarray]:
         """
         CodeFormer 복원 후에 입 원본유지를 적용합니다.
         
@@ -389,37 +389,54 @@ class FaceManager:
                 try:
                     face = faces[face_idx]
                     
-                    # InsightFace Face 객체에서 랜드마크 가져오기
-                    landmarks = getattr(face, 'landmark_2d_106', None)
-                    
-                    # landmark_2d_106이 없으면 landmark_3d_68 시도
-                    if landmarks is None:
-                        landmarks = getattr(face, 'landmark_3d_68', None)
+                    # 입 마스크 방식에 따라 랜드마크 선택
+                    if mouth_preserve_method == "chin_region":
+                        # chin_region은 무조건 landmark_2d_106만 사용
+                        landmarks = getattr(face, 'landmark_2d_106', None)
                         if landmarks is not None:
-                            self._logger.info(f"얼굴 {i+1}에서 landmark_3d_68 사용 (포인트 수: {len(landmarks)})")
-                    
-                    # 여전히 없으면 kps 시도 (5개 포인트)
-                    if landmarks is None:
-                        landmarks = getattr(face, 'kps', None)
-                        if landmarks is not None:
-                            self._logger.info(f"얼굴 {i+1}에서 kps 사용 (포인트 수: {len(landmarks)})")
+                            self._logger.info(f"얼굴 {i+1}에서 landmark_2d_106 사용 (포인트 수: {len(landmarks)})")
+                        else:
+                            self._logger.warning(f"얼굴 {i+1}에서 landmark_2d_106을 찾을 수 없습니다. chin_region 방식을 사용할 수 없습니다.")
+                    else:
+                        # ellipse 방식은 기존 로직 유지
+                        landmarks = getattr(face, 'landmark_2d_106', None)
+                        
+                        # landmark_2d_106이 없으면 landmark_3d_68 시도
+                        if landmarks is None:
+                            landmarks = getattr(face, 'landmark_3d_68', None)
+                            if landmarks is not None:
+                                self._logger.info(f"얼굴 {i+1}에서 landmark_3d_68 사용 (포인트 수: {len(landmarks)})")
+                        
+                        # 여전히 없으면 kps 시도 (5개 포인트)
+                        if landmarks is None:
+                            landmarks = getattr(face, 'kps', None)
+                            if landmarks is not None:
+                                self._logger.info(f"얼굴 {i+1}에서 kps 사용 (포인트 수: {len(landmarks)})")
                     
                     if landmarks is not None and len(landmarks) >= 5:
-                        # 입 마스크 생성
-                        mouth_mask = create_mouth_mask(
-                            landmarks, 
-                            result_image.shape, 
-                            expand_ratio=expand_ratio,
-                            expand_weights=expand_weights
-                        )
-
-                        # 입 부분을 원본으로 복원
-                        #mouth_mask_bool = mouth_mask > 0
-                        #result_image[mouth_mask_bool] = original_image[mouth_mask_bool]
-                       
-                        result_image_poisson = smooth_blend_mouth(result_image, original_image, mouth_mask, "poisson")  # 원본 마스크 사용
-                        
-                        self._logger.info(f"얼굴 {i+1} 입 원본유지 적용 완료 (랜드마크 수: {len(landmarks)})")
+                        # 입 마스크 생성 방식에 따라 분기
+                        if mouth_preserve_method == "chin_region":
+                            # 입과 턱 마스크 방식 - 106개 랜드마크 필요
+                            if len(landmarks) >= 106:
+                                mouth_mask = create_chin_region_mask(landmarks, result_image.shape)
+                                # gaussian 블렌딩 사용
+                                result_image = smooth_blend_mouth(result_image, original_image, mouth_mask, "gaussian")
+                                self._logger.info(f"얼굴 {i+1} 입과 턱 마스크 적용 완료 (랜드마크 수: {len(landmarks)})")
+                            else:
+                                # 106개 랜드마크가 없으면 해당 얼굴은 건너뛰기
+                                self._logger.warning(f"얼굴 {i+1} 입과 턱 마스크를 위해 106개 랜드마크가 필요하지만 {len(landmarks)}개만 있습니다. 해당 얼굴은 건너뜁니다.")
+                                continue
+                        else:
+                            # 기존 입주변 타원 마스크 방식
+                            mouth_mask = create_mouth_mask(
+                                landmarks, 
+                                result_image.shape, 
+                                expand_ratio=expand_ratio,
+                                expand_weights=expand_weights
+                            )
+                            # poisson 블렌딩 사용
+                            result_image = smooth_blend_mouth(result_image, original_image, mouth_mask, "poisson")
+                            self._logger.info(f"얼굴 {i+1} 입주변 타원 마스크 적용 완료 (랜드마크 수: {len(landmarks)})")
                     else:
                         self._logger.warning(f"얼굴 {i+1}의 충분한 랜드마크를 찾을 수 없습니다 (현재: {len(landmarks) if landmarks is not None else 0}개)")
                         
@@ -428,7 +445,7 @@ class FaceManager:
                     continue
             
             # BGR을 RGB로 변환
-            result_image_rgb = cv2.cvtColor(result_image if result_image_poisson is None else result_image_poisson, cv2.COLOR_BGR2RGB)
+            result_image_rgb = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
             
             message = f"입 원본유지 적용 완료!\n적용된 얼굴: {len(indices)}개"
             

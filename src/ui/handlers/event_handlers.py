@@ -56,13 +56,23 @@ class EventHandlers:
         tab.target_upload.change(
             fn=tab.process_target_image,
             inputs=[tab.target_upload, tab.face_indices_input],
-            outputs=[gr.State(), tab.swap_result_text, tab.original_image, tab.face_indices_input]
+            outputs=[gr.State(), tab.swap_result_text, tab.original_image, tab.face_indices_input, tab.preserve_mouth_checkbox, tab.mouth_preserve_method]
         )
         
-        # 입 원본유지 체크박스 변경 시 설정 그룹 표시/숨김
+        # 입 원본유지 체크박스 변경 시 설정 그룹과 방식 선택 영역 표시/숨김
         tab.preserve_mouth_checkbox.change(
-            fn=self.ui_helpers.toggle_mouth_settings,
-            inputs=[tab.preserve_mouth_checkbox],
+            fn=lambda checked, method: (
+                self.ui_helpers.toggle_mouth_settings(checked, method),
+                self.ui_helpers.toggle_mouth_preserve_method(checked)
+            ),
+            inputs=[tab.preserve_mouth_checkbox, tab.mouth_preserve_method],
+            outputs=[tab.mouth_settings_group, tab.mouth_preserve_method]
+        )
+        
+        # 입 원본유지 방식 변경 시 설정 그룹 표시/숨김
+        tab.mouth_preserve_method.change(
+            fn=self.ui_helpers.toggle_mouth_settings_by_method,
+            inputs=[tab.preserve_mouth_checkbox, tab.mouth_preserve_method],
             outputs=[tab.mouth_settings_group]
         )
         
@@ -75,6 +85,7 @@ class EventHandlers:
                 tab.source_face_dropdown, 
                 tab.codeformer_checkbox, 
                 tab.preserve_mouth_checkbox, 
+                tab.mouth_preserve_method,
                 tab.expand_ratio_slider, 
                 tab.scale_x_slider, 
                 tab.scale_y_slider, 
@@ -89,6 +100,13 @@ class EventHandlers:
             fn=self._delete_result_wrapper,
             inputs=[],
             outputs=[tab.delete_result_text, tab.delete_result_text, tab.swapped_image]
+        )
+        
+        # 타겟이미지로 이동 버튼 클릭 시 처리
+        tab.move_to_target_btn.click(
+            fn=self._move_to_target_wrapper,
+            inputs=[],
+            outputs=[tab.swap_result_text, tab.target_upload, tab.original_image]
         )
         
         # 얼굴 교체 탭의 새로고침 버튼 클릭 시 처리
@@ -144,6 +162,7 @@ class EventHandlers:
         source_face_name: str, 
         use_codeformer: bool, 
         preserve_mouth: bool, 
+        mouth_preserve_method: str,
         expand_ratio: float, 
         scale_x: float, 
         scale_y: float, 
@@ -182,7 +201,7 @@ class EventHandlers:
         # FaceSwapTab 인스턴스 생성하여 메서드 호출
         face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
         final_image, message, result_image = face_swap_tab.perform_face_swap_with_optional_codeformer(
-            file_path, face_indices, source_face_name, use_codeformer, preserve_mouth, mouth_settings
+            file_path, face_indices, source_face_name, use_codeformer, preserve_mouth, mouth_settings, mouth_preserve_method
         )
         return final_image, message, result_image
     
@@ -191,8 +210,19 @@ class EventHandlers:
         결과 이미지 삭제 래퍼
         
         Returns:
-            (삭제 성공여부, 메시지, None)
+            (삭제 성공여부, 메시지, 다음 삭제 대상 이미지)
         """
         face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
-        success, message, _ = face_swap_tab.delete_result_image()
-        return success, message, None
+        success, message, next_image = face_swap_tab.delete_result_image()
+        return success, message, next_image
+    
+    def _move_to_target_wrapper(self) -> tuple:
+        """
+        타겟이미지로 이동 래퍼
+        
+        Returns:
+            (메시지, 타겟 이미지, 원본 이미지)
+        """
+        face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
+        success, message, target_image, original_image = face_swap_tab.move_result_to_target()
+        return message, target_image, original_image

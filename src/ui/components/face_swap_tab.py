@@ -84,6 +84,18 @@ class FaceSwapTab:
                         info="체크하면 얼굴 교체 후 입과 입주변을 원본 이미지로 복원합니다"
                     )
                     
+                    # 입 원본유지 방식 선택
+                    self.mouth_preserve_method = gr.Radio(
+                        choices=[
+                            ("입주변 타원 마스크", "ellipse"),
+                            ("입과 턱 마스크", "chin_region")
+                        ],
+                        value="chin_region",
+                        label="입 원본유지 방식",
+                        info="입 원본유지 시 사용할 마스크 방식을 선택하세요",
+                        visible=False
+                    )
+                    
                     # 입 마스크 설정 (조건부 표시)
                     with gr.Group(visible=False) as self.mouth_settings_group:
                         gr.Markdown("### 입 마스크 설정")
@@ -161,10 +173,15 @@ class FaceSwapTab:
                             type="numpy"
                         )
                         
-                        # 결과 이미지 삭제 버튼
+                        # 결과 이미지 관리 버튼
                         with gr.Row():
                             self.delete_result_btn = gr.Button(
                                 "🗑️ 결과 이미지 삭제",
+                                variant="secondary",
+                                size="sm"
+                            )
+                            self.move_to_target_btn = gr.Button(
+                                "📤 타겟이미지로 이동",
                                 variant="secondary",
                                 size="sm"
                             )
@@ -179,20 +196,20 @@ class FaceSwapTab:
         
         return tab
     
-    def process_target_image(self, file_path: str, current_indices: str = "") -> Tuple[bool, str, Optional[np.ndarray], str]:
+    def process_target_image(self, file_path: str, current_indices: str = "") -> Tuple[bool, str, Optional[np.ndarray], str, bool, str]:
         """
         타겟 이미지를 처리하고 얼굴 탐지 결과를 박스로 표시합니다.
-        인덱스 검증도 함께 수행합니다.
+        인덱스 검증도 함께 수행하고 기본값으로 리셋합니다.
         
         Args:
             file_path: 파일 경로
             current_indices: 현재 얼굴 인덱스
             
         Returns:
-            (성공여부, 메시지, 박스가 그려진 이미지, 검증된 인덱스)
+            (성공여부, 메시지, 박스가 그려진 이미지, 검증된 인덱스, 입원본유지 체크, 입원본유지 방식)
         """
         if file_path is None:
-            return False, "이미지를 업로드해주세요.", None, ""
+            return False, "이미지를 업로드해주세요.", None, "", False, "chin_region"
         
         try:
             from PIL import Image
@@ -211,13 +228,13 @@ class FaceSwapTab:
             validated_indices = self.validate_and_clear_indices(current_indices, image_rgb)
             
             if success:
-                return True, message, result_image, validated_indices
+                return True, message, result_image, validated_indices, False, "chin_region"
             else:
                 # 얼굴을 찾지 못한 경우 원본 이미지 반환
-                return True, f"이미지 로드 완료\n{message}", image_rgb, validated_indices
+                return True, f"이미지 로드 완료\n{message}", image_rgb, validated_indices, False, "chin_region"
             
         except Exception as e:
-            return False, f"이미지를 로드할 수 없습니다: {str(e)}", None, ""
+            return False, f"이미지를 로드할 수 없습니다: {str(e)}", None, "", False, "chin_region"
     
     def perform_face_swap_with_optional_codeformer(
         self, 
@@ -226,7 +243,8 @@ class FaceSwapTab:
         source_face_name: str, 
         use_codeformer: bool, 
         preserve_mouth: bool = False, 
-        mouth_settings: Optional[Dict[str, Any]] = None
+        mouth_settings: Optional[Dict[str, Any]] = None,
+        mouth_preserve_method: str = "ellipse"
     ) -> Tuple[Optional[np.ndarray], str, Optional[np.ndarray]]:
         """
         얼굴 교체를 수행하고, 선택적으로 CodeFormer 복원도 수행합니다.
@@ -297,7 +315,7 @@ class FaceSwapTab:
                     
                     # 입 원본유지 적용
                     mouth_success, mouth_message, mouth_restored_image_rgb = self.face_manager.apply_mouth_preservation(
-                        final_image_bgr, image_bgr, face_indices, mouth_settings
+                        final_image_bgr, image_bgr, face_indices, mouth_settings, mouth_preserve_method
                     )
                     
                     if mouth_success:
@@ -323,15 +341,52 @@ class FaceSwapTab:
         except Exception as e:
             return None, f"얼굴 교체 실패: {str(e)}", None
     
-    def delete_result_image(self) -> Tuple[bool, str, None]:
+    def delete_result_image(self) -> Tuple[bool, str, Optional[np.ndarray]]:
         """
-        최종 결과 이미지 파일을 삭제하고 화면을 초기화합니다.
+        최종 결과 이미지 파일을 삭제하고 다음으로 삭제될 이미지를 반환합니다.
         
         Returns:
-            (삭제 성공여부, 메시지, None)
+            (삭제 성공여부, 메시지, 다음 삭제 대상 이미지)
         """
         success, message = self.file_manager.delete_latest_result_image()
-        return success, message, None
+        
+        if success:
+            # 삭제 성공 시 다음으로 삭제될 이미지 가져오기
+            next_success, next_message, next_image = self.file_manager.get_next_result_image()
+            if next_success:
+                return success, f"{message}\n{next_message}", next_image
+            else:
+                return success, f"{message}\n{next_message}", None
+        else:
+            return success, message, None
+    
+    def move_result_to_target(self) -> Tuple[bool, str, Optional[np.ndarray], Optional[np.ndarray]]:
+        """
+        결과 이미지를 타겟 이미지로 이동시킵니다.
+        
+        Returns:
+            (성공여부, 메시지, 타겟 이미지, 원본 이미지)
+        """
+        try:
+            # 다음으로 삭제될 이미지 가져오기 (현재 결과 이미지)
+            success, message, result_image = self.file_manager.get_next_result_image()
+            
+            if success and result_image is not None:
+                # 결과 이미지를 타겟 이미지로 설정
+                # 얼굴 탐지 및 박스 그리기
+                import cv2
+                image_bgr = cv2.cvtColor(result_image, cv2.COLOR_RGB2BGR)
+                detect_success, detect_message, boxed_image = self.face_manager.detect_and_draw_faces(image_bgr)
+                
+                if detect_success:
+                    return True, f"✅ 타겟 이미지로 이동 완료\n{detect_message}", result_image, boxed_image
+                else:
+                    return True, f"✅ 타겟 이미지로 이동 완료\n{detect_message}", result_image, result_image
+            else:
+                return False, "이동할 결과 이미지가 없습니다.", None, None
+                
+        except Exception as e:
+            return False, f"❌ 타겟 이미지로 이동 실패: {str(e)}", None, None
     
     def handle_face_click(self, evt: gr.SelectData, current_indices: str, original_image: np.ndarray) -> str:
         """
