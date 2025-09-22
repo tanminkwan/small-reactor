@@ -8,6 +8,12 @@ python-dotenv>=1.0.0
 # CodeFormer dependencies
 codeformer-pip>=0.0.4
 
+# AI/ML dependencies
+diffusers[torch]>=0.35.1
+transformers>=4.56.1
+accelerate>=1.10.1
+safetensors>=0.6.2
+
 # ONNX Runtime (CPU version - 기본)
 #onnxruntime>=1.15.0
 
