@@ -40,20 +40,9 @@ class InpaintingTab:
         """
         with gr.Tab("Inpainting") as tab:
             gr.Markdown("## 🎨 Inpainting")
-            gr.Markdown("""
-            이미지를 업로드하고 마스킹할 영역을 그려보세요.
-            
-            **사용법:**
-            1. 이미지를 업로드하세요
-            2. 이미지 위에서 편집 모드를 활성화하세요 (연필 아이콘 클릭)
-            3. 마우스로 마스킹할 영역을 그리세요
-            4. '임시 저장' 버튼을 눌러 결과를 저장하세요
-            
-            *참고: 브러시 크기는 Gradio 기본값을 사용합니다.*
-            """)
             
             with gr.Row():
-                with gr.Column(scale=1):
+                with gr.Column(scale=3):  # 이미지 영역을 더 크게 (scale=3)
                     # 이미지 업로드 및 마스킹 영역
                     # Gradio 5.46.1에서 ImageEditor 시도
                     try:
@@ -62,6 +51,7 @@ class InpaintingTab:
                             label="이미지 업로드 및 마스킹 (편집 모드에서 브러시로 그리기)",
                             type="pil",
                             interactive=True,
+                            height=600,  # 높이를 600px로 설정
                             brush=gr.Brush(
                                 colors=["#808080"],
                                 default_size=20
@@ -73,45 +63,40 @@ class InpaintingTab:
                             label="이미지 업로드 (우클릭 후 편집 모드 선택)",
                             type="pil",
                             interactive=True,
+                            height=600,  # 높이를 600px로 설정
                             sources=["upload", "webcam", "clipboard"]
                         )
                     
-                    # 브러시 크기 조절
-                    self.brush_size_slider = gr.Slider(
-                        minimum=5,
-                        maximum=100,
-                        value=20,
-                        step=1,
-                        label="브러시 크기 (참고용)",
-                        interactive=True
-                    )
+                    # 사용법 안내
+                    gr.Markdown("""
+                    **사용법:**
+                    1. 이미지를 업로드하세요
+                    2. 편집 모드에서 마스킹할 영역을 그리세요 (색칠한 부분이 inpainting 영역이 됩니다)
+                    3. '마스크 저장' 버튼을 눌러 바이너리 마스크를 생성하세요
                     
-                    # 브러시 크기 표시
-                    self.brush_size_display = gr.Textbox(
-                        label="브러시 정보",
-                        value="현재 브러시 크기: 20px (참고용 - 실제 브러시 크기는 Gradio 기본값 사용)",
-                        interactive=False
-                    )
+                    **마스크 형식:** 색칠한 부분은 흰색(255), 나머지는 검은색(0)으로 JPG 저장
+                    """)
                     
-                    # 임시 저장 버튼
+                    # 마스크 저장 버튼
                     self.tmp_save_button = gr.Button(
-                        "임시 저장",
+                        "마스크 저장",
                         variant="primary",
                         size="lg"
                     )
                 
-                with gr.Column(scale=1):
-                    # 결과 표시 영역
+                with gr.Column(scale=2):  # 결과 영역을 중간 크기로 (scale=2)
+                    # 바이너리 마스크 결과 표시
                     self.result_display = gr.Image(
-                        label="마스킹 결과",
+                        label="생성된 바이너리 마스크 (흰색: 마스킹 영역, 검은색: 보존 영역)",
                         type="pil",
-                        interactive=False
+                        interactive=False,
+                        height=400  # 높이를 400px로 설정
                     )
                     
                     # 저장 상태 표시
                     self.save_status = gr.Textbox(
                         label="저장 상태",
-                        value="마스킹을 그리고 임시 저장 버튼을 눌러주세요.",
+                        value="마스킹을 그리고 '마스크 저장' 버튼을 눌러주세요.",
                         interactive=False
                     )
                     
@@ -127,99 +112,146 @@ class InpaintingTab:
     def setup_event_handlers(self):
         """이벤트 핸들러를 설정합니다."""
         
-        # 브러시 크기 변경 시 브러시 정보 업데이트
-        # 참고: Gradio 5.46.1에서는 런타임 브러시 크기 변경이 제한적
-        self.brush_size_slider.change(
-            fn=self._update_brush_size,
-            inputs=[self.brush_size_slider],
-            outputs=[self.brush_size_display]
-        )
-        
-        # 임시 저장 버튼 클릭 시
+        # 마스크 저장 버튼 클릭 시
         self.tmp_save_button.click(
             fn=self._save_mask_result,
             inputs=[self.image_input],
             outputs=[self.result_display, self.save_status, self.saved_path_display]
         )
     
-    def _update_brush_size(self, brush_size: int) -> str:
-        """
-        브러시 크기를 업데이트합니다.
-        
-        Args:
-            brush_size: 새로운 브러시 크기
-            
-        Returns:
-            브러시 크기 변경 메시지
-        """
-        # Gradio 5.46.1에서는 런타임 브러시 크기 변경이 제한적
-        # 대신 사용자에게 브러시 크기 정보를 제공
-        return f"현재 브러시 크기: {brush_size}px (참고용 - 실제 브러시 크기는 Gradio 기본값 사용)"
-    
     def _save_mask_result(
         self, 
         image_data: Dict[str, Any]
     ) -> Tuple[Optional[np.ndarray], str, str]:
         """
-        마스킹 결과를 임시 저장합니다.
+        바이너리 마스크를 생성하고 저장합니다.
         
         Args:
             image_data: Gradio Image 컴포넌트에서 반환된 데이터
             
         Returns:
-            Tuple[마스킹된 이미지, 저장 상태 메시지, 저장된 파일 경로]
+            Tuple[바이너리 마스크 이미지, 저장 상태 메시지, 저장된 파일 경로]
         """
         try:
             if image_data is None:
                 return None, "❌ 이미지가 없습니다.", ""
             
             # Gradio Image 컴포넌트에서 이미지와 마스크 추출
+            original_image = None
+            mask_data = None
+            
             if isinstance(image_data, dict):
-                # 편집된 이미지 (마스크 포함)
-                if "composite" in image_data:
-                    composite_image = image_data["composite"]
+                # 원본 이미지
+                if "background" in image_data:
+                    original_image = image_data["background"]
                 elif "image" in image_data:
-                    composite_image = image_data["image"]
-                else:
-                    return None, "❌ 이미지 데이터를 찾을 수 없습니다.", ""
+                    original_image = image_data["image"]
+                
+                # 마스크 데이터
+                if "layers" in image_data and len(image_data["layers"]) > 0:
+                    # 첫 번째 레이어를 마스크로 사용
+                    mask_data = image_data["layers"][0]
+                elif "composite" in image_data and original_image is not None:
+                    # composite와 원본 이미지 차이로 마스크 생성
+                    composite_image = image_data["composite"]
+                    mask_data = self._extract_mask_from_composite(original_image, composite_image)
             else:
-                composite_image = image_data
+                # 단순 이미지인 경우 전체를 마스크로 처리
+                original_image = image_data
+            
+            if original_image is None:
+                return None, "❌ 원본 이미지를 찾을 수 없습니다.", ""
             
             # PIL Image를 numpy array로 변환
-            if hasattr(composite_image, 'convert'):
-                composite_array = np.array(composite_image.convert('RGB'))
+            if hasattr(original_image, 'convert'):
+                original_array = np.array(original_image.convert('RGB'))
             else:
-                composite_array = np.array(composite_image)
+                original_array = np.array(original_image)
+            
+            # 바이너리 마스크 생성
+            if mask_data is not None:
+                # 마스크 데이터가 있는 경우
+                if hasattr(mask_data, 'convert'):
+                    mask_array = np.array(mask_data.convert('L'))
+                else:
+                    mask_array = np.array(mask_data)
+                    if len(mask_array.shape) == 3:
+                        mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
+                
+                # 바이너리 마스크로 변환 (임계값 적용)
+                binary_mask = np.zeros_like(mask_array)
+                binary_mask[mask_array > 50] = 255  # 그려진 부분을 흰색으로
+            else:
+                # 마스크 데이터가 없는 경우 전체를 검은색으로
+                binary_mask = np.zeros((original_array.shape[0], original_array.shape[1]), dtype=np.uint8)
             
             # 타임스탬프를 포함한 파일명 생성
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"inpainting_mask_{timestamp}.png"
+            filename = f"inpainting_mask_{timestamp}.jpg"
             filepath = self.temp_dir / filename
             
-            # 이미지 저장
-            cv2.imwrite(
-                str(filepath), 
-                cv2.cvtColor(composite_array, cv2.COLOR_RGB2BGR)
-            )
+            # 바이너리 마스크를 JPG로 저장
+            cv2.imwrite(str(filepath), binary_mask)
             
-            # 마스크 영역 추출 (선택적)
-            mask_filename = f"inpainting_mask_only_{timestamp}.png"
-            mask_filepath = self.temp_dir / mask_filename
+            # PIL Image로 변환하여 표시용으로 반환
+            from PIL import Image
+            mask_pil = Image.fromarray(binary_mask, mode='L').convert('RGB')
             
-            # 마스크만 별도 저장하는 로직 (필요시)
-            if isinstance(image_data, dict) and "mask" in image_data:
-                mask_data = image_data["mask"]
-                if mask_data is not None:
-                    mask_array = np.array(mask_data)
-                    cv2.imwrite(str(mask_filepath), mask_array)
+            status_message = f"✅ 바이너리 마스크가 저장되었습니다. ({timestamp})"
             
-            status_message = f"✅ 마스킹 결과가 저장되었습니다. ({timestamp})"
-            
-            return composite_image, status_message, str(filepath)
+            return mask_pil, status_message, str(filepath)
             
         except Exception as e:
-            error_message = f"❌ 저장 중 오류가 발생했습니다: {str(e)}"
+            error_message = f"❌ 마스크 저장 중 오류가 발생했습니다: {str(e)}"
             return None, error_message, ""
+    
+    def _extract_mask_from_composite(
+        self, 
+        original_image, 
+        composite_image
+    ) -> Optional[np.ndarray]:
+        """
+        원본 이미지와 composite 이미지의 차이를 이용해 마스크를 추출합니다.
+        
+        Args:
+            original_image: 원본 이미지
+            composite_image: 편집된 composite 이미지
+            
+        Returns:
+            추출된 마스크 (None if 실패)
+        """
+        try:
+            # PIL Image를 numpy array로 변환
+            if hasattr(original_image, 'convert'):
+                orig_array = np.array(original_image.convert('RGB'))
+            else:
+                orig_array = np.array(original_image)
+                
+            if hasattr(composite_image, 'convert'):
+                comp_array = np.array(composite_image.convert('RGB'))
+            else:
+                comp_array = np.array(composite_image)
+            
+            # 크기가 다른 경우 리사이즈
+            if orig_array.shape != comp_array.shape:
+                from PIL import Image
+                comp_pil = Image.fromarray(comp_array)
+                comp_pil = comp_pil.resize((orig_array.shape[1], orig_array.shape[0]))
+                comp_array = np.array(comp_pil)
+            
+            # 차이 계산
+            diff = np.abs(orig_array.astype(np.float32) - comp_array.astype(np.float32))
+            diff_gray = np.mean(diff, axis=2)  # RGB를 그레이스케일로
+            
+            # 임계값을 적용하여 마스크 생성
+            mask = np.zeros_like(diff_gray, dtype=np.uint8)
+            mask[diff_gray > 10] = 255  # 차이가 있는 부분을 마스크로
+            
+            return mask
+            
+        except Exception as e:
+            print(f"마스크 추출 중 오류: {e}")
+            return None
     
     def _create_masked_preview(
         self, 
