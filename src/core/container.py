@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from src.services.face_manager import FaceManager
 from src.services.file_manager import FileManager
+from src.services.inpaint_service import InpaintService
 from src.utils.config import Config
 
 
@@ -32,6 +33,7 @@ class DIContainer:
         self._config = None
         self._face_manager = None
         self._file_manager = None
+        self._inpaint_service = None
         
         # 서비스 초기화
         self._initialize_services()
@@ -54,6 +56,10 @@ class DIContainer:
             output_path = os.getenv("OUTPUT_PATH", "./outputs")
             self._file_manager = FileManager(faces_path, output_path)
             self._logger.info("FileManager 초기화 완료")
+            
+            # InpaintService 초기화
+            self._inpaint_service = InpaintService(self._config)
+            self._logger.info("InpaintService 초기화 완료")
             
         except Exception as e:
             self._logger.error(f"서비스 초기화 실패: {e}")
@@ -92,6 +98,17 @@ class DIContainer:
             raise RuntimeError("FileManager가 초기화되지 않았습니다.")
         return self._file_manager
     
+    def get_inpaint_service(self) -> InpaintService:
+        """
+        InpaintService 인스턴스를 반환합니다.
+        
+        Returns:
+            InpaintService 인스턴스
+        """
+        if self._inpaint_service is None:
+            raise RuntimeError("InpaintService가 초기화되지 않았습니다.")
+        return self._inpaint_service
+    
     def is_initialized(self) -> bool:
         """
         모든 서비스가 초기화되었는지 확인합니다.
@@ -102,7 +119,8 @@ class DIContainer:
         return (
             self._config is not None and
             self._face_manager is not None and
-            self._file_manager is not None
+            self._file_manager is not None and
+            self._inpaint_service is not None
         )
     
     def get_service_info(self) -> dict:
@@ -116,6 +134,7 @@ class DIContainer:
             "config_initialized": self._config is not None,
             "face_manager_initialized": self._face_manager is not None,
             "file_manager_initialized": self._file_manager is not None,
+            "inpaint_service_initialized": self._inpaint_service is not None,
             "all_services_initialized": self.is_initialized()
         }
 

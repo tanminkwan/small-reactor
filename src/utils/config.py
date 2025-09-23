@@ -36,6 +36,7 @@ class Config:
             "buffalo_l_model_path": self._get_str("BUFFALO_L_MODEL_PATH", "models/buffalo_l"),
             "inswapper_model_path": self._get_str("INSWAPPER_MODEL_PATH", "models/inswapper_128.onnx"),
             "codeformer_model_path": self._get_str("CODEFORMER_MODEL_PATH", "models/codeformer-v0.1.0.pth"),
+            "inpaint_model_path": self._get_str("INPAINT_MODEL_PATH", "TheImposterImposters/URPM-SD1.5-v2.3.inpainting"),
             
             # 로깅 설정
             "log_level": self._get_str("LOG_LEVEL", "INFO"),
@@ -49,6 +50,10 @@ class Config:
             # 성능 설정
             "max_image_size": self._get_int("MAX_IMAGE_SIZE", 1024),
             "batch_size": self._get_int("BATCH_SIZE", 1),
+            
+            # 출력 경로 설정
+            "output_path": self._get_str("OUTPUT_PATH", "./output"),
+            "inpaint_output_path": self._get_str("INPAINT_OUTPUT_PATH", "./output/inpaint"),
         }
     
     def _get_str(self, key: str, default: str) -> str:
@@ -119,6 +124,7 @@ class Config:
             self.get_model_path("buffalo_l")
             self.get_model_path("inswapper")
             self.get_model_path("codeformer")
+            self.get_model_path("inpaint")
             
             # 포트 번호 검증
             port = self.get("gradio_server_port")

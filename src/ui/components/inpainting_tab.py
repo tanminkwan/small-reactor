@@ -13,19 +13,22 @@ from pathlib import Path
 from typing import Tuple, Optional, Dict, Any, List
 
 from src.services.file_manager import FileManager
+from src.services.inpaint_service import InpaintService
 
 
 class InpaintingTab:
     """Inpainting 탭 컴포넌트"""
     
-    def __init__(self, file_manager: FileManager):
+    def __init__(self, file_manager: FileManager, inpaint_service: InpaintService):
         """
         초기화
         
         Args:
             file_manager: 파일 관리 서비스
+            inpaint_service: Inpainting 서비스
         """
         self.file_manager = file_manager
+        self.inpaint_service = inpaint_service
         self.prompts_dir = Path("./prompts")
         self.prompts_dir.mkdir(exist_ok=True)
     
@@ -124,12 +127,70 @@ class InpaintingTab:
                             size="sm"
                         )
                     
-                    # 마스크 보기 버튼
-                    self.tmp_save_button = gr.Button(
-                        "마스크 보기",
-                        variant="primary",
-                        size="lg"
-                    )
+                    # 생성 파라미터 설정
+                    gr.Markdown("### ⚙️ 생성 파라미터")
+                    
+                    with gr.Row():
+                        self.guidance_scale = gr.Slider(
+                            label="Guidance Scale",
+                            minimum=1.0,
+                            maximum=20.0,
+                            step=0.5,
+                            value=9.0,
+                            info="프롬프트 따르기 강도 (7.0~12.0 권장)"
+                        )
+                        self.num_inference_steps = gr.Slider(
+                            label="Inference Steps",
+                            minimum=10,
+                            maximum=150,
+                            step=5,
+                            value=50,
+                            info="생성 품질 vs 속도 (30~80 권장)"
+                        )
+                    
+                    with gr.Row():
+                        self.strength = gr.Slider(
+                            label="Strength (변경 강도)",
+                            minimum=0.1,
+                            maximum=1.0,
+                            step=0.05,
+                            value=1.0,
+                            info="0.1=원본 유지하며 살짝 변경, 1.0=마스크 영역 완전히 새로 생성"
+                        )
+                        self.mask_blur = gr.Slider(
+                            label="Mask Blur (경계 블러)",
+                            minimum=0,
+                            maximum=20,
+                            step=1,
+                            value=4,
+                            info="마스크 경계를 부드럽게 처리"
+                        )
+                    
+                    # 파라미터 설명
+                    gr.Markdown("""
+                    **파라미터 가이드:**
+                    - **Guidance Scale**: 낮을수록 자유로운 생성, 높을수록 프롬프트에 충실
+                    - **Inference Steps**: 실제 수행할 스텝 수 (자동 보정됨)
+                    - **Strength**: 마스크 영역 변경 강도 (0.1=원본 유지, 1.0=완전 재생성)
+                    - **Mask Blur**: 마스크 경계 부드럽게 처리 (4 = 기본값)
+                    
+                    ⚠️ **참고**: Strength 값에 따라 실제 스텝 수가 자동 조정됩니다.
+                    """, elem_classes=["parameter-guide"])
+                    
+                    # 버튼들
+                    with gr.Row():
+                        self.tmp_save_button = gr.Button(
+                            "마스크 보기",
+                            variant="secondary",
+                            size="lg",
+                            scale=1
+                        )
+                        self.generate_button = gr.Button(
+                            "🎨 이미지 생성",
+                            variant="primary",
+                            size="lg",
+                            scale=2
+                        )
                 
                 with gr.Column(scale=2):  # 결과 영역을 중간 크기로 (scale=2)
                     # 바이너리 마스크 결과 표시
@@ -137,8 +198,31 @@ class InpaintingTab:
                         label="생성된 바이너리 마스크 (흰색: 마스킹 영역, 검은색: 보존 영역)",
                         type="pil",
                         interactive=False,
-                        height=400  # 높이를 400px로 설정
+                        height=300  # 높이를 300px로 설정
                     )
+                    
+                    # 최종 생성된 이미지 표시
+                    with gr.Group():
+                        self.output_image = gr.Image(
+                            label="최종결과",
+                            type="pil",
+                            interactive=False,
+                            height=400,  # 높이를 400px로 설정
+                            visible=True  # 항상 보이도록 설정
+                        )
+                        
+                        # 결과 이미지 관리 버튼
+                        with gr.Row():
+                            self.delete_result_btn = gr.Button(
+                                "🗑️ 결과이미지 삭제",
+                                variant="secondary",
+                                size="sm"
+                            )
+                            self.move_to_edit_btn = gr.Button(
+                                "📝 편집모드로 이동",
+                                variant="secondary",
+                                size="sm"
+                            )
                     
                     # 상태 표시
                     self.save_status = gr.Textbox(
@@ -178,6 +262,45 @@ class InpaintingTab:
             fn=self._clear_prompts,
             inputs=[],
             outputs=[self.positive_prompt, self.negative_prompt, self.prompt_selector, self.save_status]
+        )
+        
+        # 이미지 생성 버튼 클릭
+        self.generate_button.click(
+            fn=self._generate_inpaint_image,
+            inputs=[
+                self.image_input,
+                self.positive_prompt,
+                self.negative_prompt,
+                self.guidance_scale,
+                self.num_inference_steps,
+                self.strength,
+                self.mask_blur
+            ],
+            outputs=[
+                self.output_image,
+                self.save_status
+            ]
+        )
+        
+        # 결과 이미지 삭제 버튼 클릭
+        self.delete_result_btn.click(
+            fn=self._delete_result_image_with_visibility,
+            inputs=[],
+            outputs=[
+                self.output_image,
+                self.save_status
+            ],
+            show_progress=False
+        )
+        
+        # 편집모드로 이동 버튼 클릭
+        self.move_to_edit_btn.click(
+            fn=self._move_to_edit_mode,
+            inputs=[self.output_image],
+            outputs=[
+                self.image_input,
+                self.save_status
+            ]
         )
     
     def _show_mask_result(
@@ -416,4 +539,157 @@ class InpaintingTab:
             gr.Dropdown(value=None),  # prompt_selector 초기화
             "✅ 모든 프롬프트 입력이 초기화되었습니다."  # save_status
         )
+    
+    def _generate_inpaint_image(
+        self,
+        image_data: Dict[str, Any],
+        positive_prompt: str,
+        negative_prompt: str,
+        guidance_scale: float,
+        num_inference_steps: int,
+        strength: float,
+        mask_blur: int
+    ) -> Tuple[Optional[np.ndarray], str]:
+        """
+        Inpainting을 수행하여 최종 이미지를 생성합니다.
+        
+        Args:
+            image_data: Gradio Image 컴포넌트에서 반환된 데이터
+            positive_prompt: Positive 프롬프트
+            negative_prompt: Negative 프롬프트
+            guidance_scale: 가이던스 스케일 값
+            num_inference_steps: 추론 스텝 수
+            strength: 수정 강도 (0.1=마스크만, 1.0=주변까지)
+            mask_blur: 마스크 경계 블러 정도
+            
+        Returns:
+            Tuple[생성된 이미지, 상태 메시지]
+        """
+        try:
+            if image_data is None:
+                return None, "❌ 이미지가 없습니다."
+            
+            if not positive_prompt.strip():
+                return None, "❌ Positive 프롬프트를 입력해주세요."
+            
+            # 이미지와 마스크 추출
+            original_image = None
+            mask_data = None
+            
+            if isinstance(image_data, dict):
+                # 원본 이미지
+                if "background" in image_data:
+                    original_image = image_data["background"]
+                elif "image" in image_data:
+                    original_image = image_data["image"]
+                
+                # 마스크 데이터
+                if "layers" in image_data and len(image_data["layers"]) > 0:
+                    mask_data = image_data["layers"][0]
+                elif "composite" in image_data and original_image is not None:
+                    composite_image = image_data["composite"]
+                    mask_data = self._extract_mask_from_composite(original_image, composite_image)
+            else:
+                original_image = image_data
+            
+            if original_image is None:
+                return None, "❌ 원본 이미지를 찾을 수 없습니다."
+            
+            # PIL Image를 numpy array로 변환 (BGR 형식)
+            if hasattr(original_image, 'convert'):
+                original_array = np.array(original_image.convert('RGB'))
+                original_bgr = cv2.cvtColor(original_array, cv2.COLOR_RGB2BGR)
+            else:
+                original_bgr = np.array(original_image)
+            
+            # 마스크 생성
+            if mask_data is not None:
+                if hasattr(mask_data, 'convert'):
+                    mask_array = np.array(mask_data.convert('L'))
+                else:
+                    mask_array = np.array(mask_data)
+                    if len(mask_array.shape) == 3:
+                        mask_array = cv2.cvtColor(mask_array, cv2.COLOR_RGB2GRAY)
+                
+                # 바이너리 마스크로 변환
+                binary_mask = np.zeros_like(mask_array)
+                binary_mask[mask_array > 50] = 255
+            else:
+                return None, "❌ 마스크 영역이 없습니다. 이미지에 마스킹을 해주세요."
+            
+            # 마스크가 비어있는지 확인
+            if np.sum(binary_mask) == 0:
+                return None, "❌ 마스크 영역이 없습니다. 이미지에 마스킹을 해주세요."
+            
+            # 마스크 블러 처리 적용
+            if mask_blur > 0:
+                binary_mask = cv2.GaussianBlur(binary_mask, (mask_blur*2+1, mask_blur*2+1), 0)
+            
+            # Inpainting 수행 (사용자 입력 파라미터 사용)
+            result_bgr = self.inpaint_service.generate_inpaint_image(
+                image=original_bgr,
+                mask=binary_mask,
+                prompt=positive_prompt,
+                negative_prompt=negative_prompt or "",
+                guidance_scale=guidance_scale,
+                num_inference_steps=int(num_inference_steps),
+                strength=strength
+            )
+            
+            # BGR to RGB 변환 후 PIL Image로 변환
+            result_rgb = cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
+            from PIL import Image
+            result_pil = Image.fromarray(result_rgb)
+            
+            # 자동으로 이미지 저장
+            saved_path = self.inpaint_service.save_image(result_bgr)
+            
+            return (
+                result_pil,
+                f"✅ 이미지 생성 및 저장이 완료되었습니다!\n파라미터: Guidance={guidance_scale}, Steps={int(num_inference_steps)}, Strength={strength}, Blur={mask_blur}\n저장 위치: {saved_path}"
+            )
+            
+        except Exception as e:
+            error_message = f"❌ 이미지 생성 중 오류가 발생했습니다: {str(e)}"
+            return None, error_message
+    
+    def _delete_result_image_with_visibility(self) -> Tuple[gr.update, str]:
+        """
+        가장 최근 생성된 inpaint 결과 이미지 파일을 삭제하고 UI에서도 제거합니다.
+        
+        Returns:
+            Tuple[이미지 업데이트 (값 클리어), 상태 메시지]
+        """
+        try:
+            # 실제 파일 시스템에서 가장 최근 inpaint 결과 파일 삭제
+            success, message = self.inpaint_service.delete_latest_result_image()
+            
+            if success:
+                # 삭제 성공 시 UI에서도 이미지 제거
+                return gr.update(value=None), message
+            else:
+                # 삭제 실패 시 UI는 그대로 두고 메시지만 표시
+                return gr.update(), message
+                
+        except Exception as e:
+            return gr.update(), f"❌ 이미지 삭제 중 오류가 발생했습니다: {str(e)}"
+    
+    def _move_to_edit_mode(self, output_image) -> Tuple[gr.update, str]:
+        """
+        결과 이미지를 편집 모드로 이동합니다 (이미지 업로드 및 마스킹 영역으로).
+        
+        Args:
+            output_image: 결과 이미지
+            
+        Returns:
+            Tuple[이미지 업데이트, 상태 메시지]
+        """
+        try:
+            if output_image is None:
+                return gr.update(), "❌ 이동할 결과 이미지가 없습니다."
+            
+            return gr.update(value=output_image), "✅ 결과 이미지가 편집 모드로 이동되었습니다. 새로운 마스킹을 진행해주세요."
+            
+        except Exception as e:
+            return gr.update(), f"❌ 편집 모드로 이동 중 오류가 발생했습니다: {str(e)}"
     

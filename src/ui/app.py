@@ -33,12 +33,13 @@ class FaceManagerApp:
         # 서비스 인스턴스들 가져오기
         self.face_manager = container.get_face_manager()
         self.file_manager = container.get_file_manager()
+        self.inpaint_service = container.get_inpaint_service()
         
         # 탭 컴포넌트들 초기화
         self.face_extraction_tab = FaceExtractionTab(self.face_manager)
         self.face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
         self.embedding_list_tab = EmbeddingListTab(self.file_manager)
-        self.inpainting_tab = InpaintingTab(self.file_manager)
+        self.inpainting_tab = InpaintingTab(self.file_manager, self.inpaint_service)
         self.prompt_manager_tab = PromptManagerTab(self.file_manager)
         
         # 이벤트 핸들러 초기화
