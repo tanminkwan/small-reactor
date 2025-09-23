@@ -160,9 +160,12 @@ class InpaintService:
             result_array = np.array(result)
             result_bgr = cv2.cvtColor(result_array, cv2.COLOR_RGB2BGR)
             
-            self._logger.info("Inpainting 완료")
+            # 원본과 생성 이미지를 마스크 기준으로 합성 (화질 보존)
+            blended_result = self._blend_with_original(image, result_bgr, mask)
             
-            return result_bgr
+            self._logger.info("Inpainting 및 블렌딩 완료")
+            
+            return blended_result
             
         except Exception as e:
             self._logger.error(f"Inpainting 중 오류 발생: {e}")
@@ -252,3 +255,37 @@ class InpaintService:
         except Exception as e:
             self._logger.error(f"Inpaint 파일 삭제 실패: {e}")
             return False, f"❌ 파일 삭제 실패: {str(e)}"
+    
+    def _blend_with_original(self, original: np.ndarray, generated: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """
+        원본과 생성 이미지를 마스크 기준으로 합성하여 화질 보존
+        
+        Args:
+            original: 원본 이미지 (H, W, 3) - BGR 형식
+            generated: 생성된 이미지 (H, W, 3) - BGR 형식
+            mask: 마스크 (H, W) - 255가 inpainting 영역
+            
+        Returns:
+            합성된 이미지 (H, W, 3) - BGR 형식
+        """
+        try:
+            # 마스크를 0-1 범위로 정규화
+            mask_normalized = mask.astype(np.float32) / 255.0
+            
+            # 마스크가 2D인 경우 3D로 확장
+            if len(mask_normalized.shape) == 2:
+                mask_3d = cv2.cvtColor(mask_normalized, cv2.COLOR_GRAY2BGR)
+            else:
+                mask_3d = mask_normalized
+            
+            # 블렌딩: 마스크 영역은 생성 이미지, 나머지는 원본 유지
+            blended = original.astype(np.float32) * (1 - mask_3d) + \
+                      generated.astype(np.float32) * mask_3d
+                      
+            self._logger.debug("원본과 생성 이미지 블렌딩 완료")
+            return blended.astype(np.uint8)
+            
+        except Exception as e:
+            self._logger.error(f"이미지 블렌딩 중 오류: {e}")
+            # 블렌딩 실패 시 생성된 이미지 반환
+            return generated
