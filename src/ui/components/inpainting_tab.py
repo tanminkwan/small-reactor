@@ -10,9 +10,6 @@ import numpy as np
 import cv2
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
-import tempfile
-import os
-from datetime import datetime
 
 from src.services.file_manager import FileManager
 
@@ -28,8 +25,6 @@ class InpaintingTab:
             file_manager: 파일 관리 서비스
         """
         self.file_manager = file_manager
-        self.temp_dir = Path(tempfile.gettempdir()) / "small_reactor_inpainting"
-        self.temp_dir.mkdir(exist_ok=True)
     
     def create_interface(self) -> gr.Tab:
         """
@@ -72,14 +67,14 @@ class InpaintingTab:
                     **사용법:**
                     1. 이미지를 업로드하세요
                     2. 편집 모드에서 마스킹할 영역을 그리세요 (색칠한 부분이 inpainting 영역이 됩니다)
-                    3. '마스크 저장' 버튼을 눌러 바이너리 마스크를 생성하세요
+                    3. '마스크 보기' 버튼을 눌러 바이너리 마스크를 확인하세요
                     
-                    **마스크 형식:** 색칠한 부분은 흰색(255), 나머지는 검은색(0)으로 JPG 저장
+                    **마스크 형식:** 색칠한 부분은 흰색(255), 나머지는 검은색(0)으로 표시
                     """)
                     
-                    # 마스크 저장 버튼
+                    # 마스크 보기 버튼
                     self.tmp_save_button = gr.Button(
-                        "마스크 저장",
+                        "마스크 보기",
                         variant="primary",
                         size="lg"
                     )
@@ -93,17 +88,10 @@ class InpaintingTab:
                         height=400  # 높이를 400px로 설정
                     )
                     
-                    # 저장 상태 표시
+                    # 마스크 상태 표시
                     self.save_status = gr.Textbox(
-                        label="저장 상태",
-                        value="마스킹을 그리고 '마스크 저장' 버튼을 눌러주세요.",
-                        interactive=False
-                    )
-                    
-                    # 저장된 파일 경로 표시
-                    self.saved_path_display = gr.Textbox(
-                        label="저장된 파일 경로",
-                        value="",
+                        label="마스크 상태",
+                        value="마스킹을 그리고 '마스크 보기' 버튼을 눌러주세요.",
                         interactive=False
                     )
         
@@ -112,29 +100,29 @@ class InpaintingTab:
     def setup_event_handlers(self):
         """이벤트 핸들러를 설정합니다."""
         
-        # 마스크 저장 버튼 클릭 시
+        # 마스크 보기 버튼 클릭 시
         self.tmp_save_button.click(
-            fn=self._save_mask_result,
+            fn=self._show_mask_result,
             inputs=[self.image_input],
-            outputs=[self.result_display, self.save_status, self.saved_path_display]
+            outputs=[self.result_display, self.save_status]
         )
     
-    def _save_mask_result(
+    def _show_mask_result(
         self, 
         image_data: Dict[str, Any]
-    ) -> Tuple[Optional[np.ndarray], str, str]:
+    ) -> Tuple[Optional[np.ndarray], str]:
         """
-        바이너리 마스크를 생성하고 저장합니다.
+        바이너리 마스크를 생성하고 화면에 표시합니다.
         
         Args:
             image_data: Gradio Image 컴포넌트에서 반환된 데이터
             
         Returns:
-            Tuple[바이너리 마스크 이미지, 저장 상태 메시지, 저장된 파일 경로]
+            Tuple[바이너리 마스크 이미지, 마스크 상태 메시지]
         """
         try:
             if image_data is None:
-                return None, "❌ 이미지가 없습니다.", ""
+                return None, "❌ 이미지가 없습니다."
             
             # Gradio Image 컴포넌트에서 이미지와 마스크 추출
             original_image = None
@@ -160,7 +148,7 @@ class InpaintingTab:
                 original_image = image_data
             
             if original_image is None:
-                return None, "❌ 원본 이미지를 찾을 수 없습니다.", ""
+                return None, "❌ 원본 이미지를 찾을 수 없습니다."
             
             # PIL Image를 numpy array로 변환
             if hasattr(original_image, 'convert'):
@@ -185,25 +173,17 @@ class InpaintingTab:
                 # 마스크 데이터가 없는 경우 전체를 검은색으로
                 binary_mask = np.zeros((original_array.shape[0], original_array.shape[1]), dtype=np.uint8)
             
-            # 타임스탬프를 포함한 파일명 생성
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"inpainting_mask_{timestamp}.jpg"
-            filepath = self.temp_dir / filename
-            
-            # 바이너리 마스크를 JPG로 저장
-            cv2.imwrite(str(filepath), binary_mask)
-            
-            # PIL Image로 변환하여 표시용으로 반환
+            # PIL Image로 변환하여 표시용으로 반환 (파일 저장 없이)
             from PIL import Image
             mask_pil = Image.fromarray(binary_mask, mode='L').convert('RGB')
             
-            status_message = f"✅ 바이너리 마스크가 저장되었습니다. ({timestamp})"
+            status_message = "✅ 바이너리 마스크가 생성되었습니다."
             
-            return mask_pil, status_message, str(filepath)
+            return mask_pil, status_message
             
         except Exception as e:
-            error_message = f"❌ 마스크 저장 중 오류가 발생했습니다: {str(e)}"
-            return None, error_message, ""
+            error_message = f"❌ 마스크 생성 중 오류가 발생했습니다: {str(e)}"
+            return None, error_message
     
     def _extract_mask_from_composite(
         self, 
@@ -281,24 +261,3 @@ class InpaintingTab:
         
         return result
     
-    def cleanup_temp_files(self, max_age_hours: int = 24) -> None:
-        """
-        오래된 임시 파일들을 정리합니다.
-        
-        Args:
-            max_age_hours: 최대 보관 시간 (시간 단위)
-        """
-        try:
-            import time
-            current_time = time.time()
-            max_age_seconds = max_age_hours * 3600
-            
-            for file_path in self.temp_dir.glob("inpainting_*"):
-                if file_path.is_file():
-                    file_age = current_time - file_path.stat().st_mtime
-                    if file_age > max_age_seconds:
-                        file_path.unlink()
-                        
-        except Exception as e:
-            # 로깅만 하고 계속 진행
-            print(f"임시 파일 정리 중 오류: {e}")

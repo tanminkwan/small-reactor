@@ -13,6 +13,7 @@ from src.ui.components.face_extraction_tab import FaceExtractionTab
 from src.ui.components.face_swap_tab import FaceSwapTab
 from src.ui.components.embedding_list_tab import EmbeddingListTab
 from src.ui.components.inpainting_tab import InpaintingTab
+from src.ui.components.prompt_manager_tab import PromptManagerTab
 from src.ui.handlers.event_handlers import EventHandlers
 
 
@@ -38,6 +39,7 @@ class FaceManagerApp:
         self.face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
         self.embedding_list_tab = EmbeddingListTab(self.file_manager)
         self.inpainting_tab = InpaintingTab(self.file_manager)
+        self.prompt_manager_tab = PromptManagerTab(self.file_manager)
         
         # 이벤트 핸들러 초기화
         self.event_handlers = EventHandlers(self.face_manager, self.file_manager)
@@ -68,8 +70,12 @@ class FaceManagerApp:
             with self.inpainting_tab.create_interface():
                 pass
             
-            # Inpainting 탭 이벤트 핸들러 설정 (독립적)
+            with self.prompt_manager_tab.create_interface():
+                pass
+            
+            # 독립적인 이벤트 핸들러 설정
             self.inpainting_tab.setup_event_handlers()
+            self.prompt_manager_tab.setup_event_handlers()
             
             # 이벤트 핸들러 설정
             self.event_handlers.setup_all_handlers(
@@ -125,6 +131,7 @@ class FaceManagerApp:
                 "face_swap_tab": self.face_swap_tab is not None,
                 "embedding_list_tab": self.embedding_list_tab is not None,
                 "inpainting_tab": self.inpainting_tab is not None,
+                "prompt_manager_tab": self.prompt_manager_tab is not None,
                 "event_handlers": self.event_handlers is not None
             }
         }
