@@ -6,6 +6,7 @@ Python Gradio를 사용한 얼굴 교체 애플리케이션입니다. SOLID 원�
 
 - **🎯 정확한 얼굴 탐지**: Buffalo_L 모델을 이용한 고정밀 얼굴 탐지
 - **🔄 고품질 얼굴 교체**: inswapper_128.onnx 모델을 이용한 자연스러운 얼굴 교체
+- **🎨 AI Inpainting**: Stable Diffusion을 이용한 고품질 이미지 인페인팅
 - **✨ 이미지 복원**: codeformer-v0.1.0.pth 모델을 이용한 이미지 품질 향상
 - **🌐 웹 UI**: Gradio를 이용한 사용자 친화적인 웹 인터페이스
 - **📱 드래그 앤 드롭**: 직관적인 이미지 업로드 및 교체
@@ -13,6 +14,7 @@ Python Gradio를 사용한 얼굴 교체 애플리케이션입니다. SOLID 원�
 - **👄 입 원본유지**: 얼굴 교체 후 입 부분을 원본 이미지로 복원하는 고급 기능
 - **🗑️ 결과 관리**: 생성된 결과 이미지 파일 삭제 및 화면 초기화
 - **📊 스마트 인덱싱**: 박스 안쪽에 큰 폰트로 표시되는 직관적인 얼굴 인덱스
+- **🔧 화질 보존**: 마스크 기반 블렌딩으로 원본 영역 화질 100% 보존
 
 ## 🎯 얼굴 인덱스 시스템
 
@@ -73,6 +75,9 @@ pip install -r requirements.txt
 - `inswapper_128.onnx` - 얼굴 교체 모델
 - `codeformer-v0.1.0.pth` - 이미지 복원 모델
 
+**Inpainting 모델 (자동 다운로드):**
+- `TheImposterImposters/URPM-SD1.5-v2.3.inpainting` - Stable Diffusion Inpainting 모델 (HuggingFace에서 자동 다운로드)
+
 ### 5. 환경 설정
 ```bash
 cp env.example .env
@@ -89,11 +94,13 @@ python gradio_face_manager.py
 ## 🎮 사용 방법
 
 ### 웹 인터페이스 구성
-애플리케이션은 3개의 주요 탭으로 구성되어 있습니다:
+애플리케이션은 5개의 주요 탭으로 구성되어 있습니다:
 
 1. **🔄 얼굴 교체**: 메인 기능 - 얼굴 교체 및 복원
-2. **📸 얼굴 추출**: 새로운 얼굴 데이터베이스 구축
-3. **📋 Embedding 목록**: 저장된 얼굴 정보 갤러리 관리
+2. **🎨 Inpainting**: AI 기반 이미지 인페인팅 - 마스크 영역을 프롬프트로 재생성
+3. **📸 얼굴 추출**: 새로운 얼굴 데이터베이스 구축
+4. **📋 Embedding 목록**: 저장된 얼굴 정보 갤러리 관리
+5. **📝 프롬프트 관리**: Inpainting용 프롬프트 템플릿 관리
 
 ### 얼굴 교체
 1. **타겟 이미지 업로드**: 드래그 앤 드롭으로 이미지 업로드
@@ -106,6 +113,25 @@ python gradio_face_manager.py
    - **위치 조정**: 가로/세로 오프셋 (기본값: 0)
 6. **얼굴 변경**: 버튼 클릭으로 교체 실행
 7. **결과 관리**: 🗑️ 버튼으로 결과 이미지 파일 삭제 및 화면 초기화
+
+### Inpainting (AI 이미지 생성)
+1. **이미지 업로드 및 마스킹**: 드래그 앤 드롭으로 이미지 업로드 후 마스킹 도구로 수정할 영역 지정
+2. **프롬프트 설정**: 
+   - **Positive 프롬프트**: 생성하고 싶은 내용 설명
+   - **Negative 프롬프트**: 생성하지 않을 내용 설명
+   - **프롬프트 템플릿**: 저장된 템플릿에서 선택 가능
+3. **생성 파라미터 조정**:
+   - **Guidance Scale** (1.0-20.0): 프롬프트 따르기 강도
+   - **Inference Steps** (10-150): 생성 품질 vs 속도
+   - **Strength** (0.1-1.0): 마스크 영역 변경 강도 (0.1=원본 유지, 1.0=완전 재생성)
+   - **Mask Blur** (0-20): 마스크 경계 부드럽게 처리
+   - **Mask Dilation** (0-50): 마스크 영역 픽셀 단위 확장
+4. **마스크 미리보기**: "마스크 보기" 버튼으로 생성된 마스크 확인
+5. **이미지 생성**: "🎨 이미지 생성" 버튼으로 AI 인페인팅 실행
+6. **결과 관리**:
+   - **🗑️ 결과이미지 삭제**: 생성된 파일 삭제 및 화면 초기화
+   - **📝 편집모드로 이동**: 결과 이미지를 다시 편집하기 위해 입력 영역으로 이동
+7. **화질 보존**: 마스크 이외 영역은 원본 화질 100% 보존
 
 ### 얼굴 추출
 1. **이미지 업로드**: 드래그 앤 드롭으로 이미지 업로드
@@ -122,6 +148,9 @@ python gradio_face_manager.py
 ```
 small-reactor/
 ├── src/                           # 소스 코드
+│   ├── core/                     # 핵심 시스템 컴포넌트
+│   │   ├── __init__.py
+│   │   └── container.py          # DI 컨테이너 (의존성 주입)
 │   ├── interfaces/               # SOLID 원칙의 ISP 적용
 │   │   ├── __init__.py
 │   │   ├── face_detector.py      # 얼굴 탐지 인터페이스
@@ -132,13 +161,25 @@ small-reactor/
 │   │   ├── __init__.py
 │   │   ├── buffalo_detector.py   # Buffalo_L 얼굴 탐지 서비스
 │   │   ├── inswapper_detector.py # inswapper 얼굴 교체 서비스
-│   │   └── codeformer_enhancer.py # CodeFormer 이미지 복원 서비스
+│   │   ├── codeformer_enhancer.py # CodeFormer 이미지 복원 서비스
+│   │   ├── face_manager.py       # 얼굴 관련 통합 관리 서비스
+│   │   ├── file_manager.py       # 파일 관리 서비스
+│   │   └── inpaint_service.py    # AI Inpainting 서비스
 │   ├── utils/                    # 공통 유틸리티
 │   │   ├── __init__.py
 │   │   ├── config.py             # 설정 관리
 │   │   └── mouth_mask.py         # 입 마스크 생성 유틸리티
 │   └── ui/                       # UI 관련 모듈
-│       └── __init__.py
+│       ├── __init__.py
+│       ├── app.py                # 메인 Gradio 애플리케이션
+│       └── components/           # UI 컴포넌트들
+│           ├── __init__.py
+│           ├── face_swap_tab.py  # 얼굴 교체 탭
+│           ├── inpainting_tab.py # Inpainting 탭
+│           ├── face_extract_tab.py # 얼굴 추출 탭
+│           ├── embedding_list_tab.py # Embedding 목록 탭
+│           ├── prompt_manager_tab.py # 프롬프트 관리 탭
+│           └── event_handlers.py # 이벤트 핸들러
 ├── tests/                        # 테스트 코드
 │   ├── __init__.py
 │   ├── conftest.py              # pytest 설정
@@ -169,6 +210,10 @@ small-reactor/
 │   ├── codeformer-v0.1.0.pth    # 이미지 복원 모델
 │   ├── RealESRGAN_x2plus.pth    # 이미지 업스케일링 모델
 │   └── RealESRGAN_x4plus.pth
+├── prompts/                      # Inpainting 프롬프트 템플릿
+│   ├── face_templates.json      # 얼굴 관련 프롬프트
+│   ├── object_templates.json    # 객체 관련 프롬프트
+│   └── background_templates.json # 배경 관련 프롬프트
 ├── faces/                        # 추출된 얼굴 데이터
 │   ├── 강성연2.jpg              # 얼굴 이미지
 │   ├── 강성연2.json             # 얼굴 임베딩
@@ -226,11 +271,17 @@ MODELS_PATH=./models
 # 결과 이미지 저장 경로
 OUTPUT_PATH=./outputs
 
+# Inpainting 결과 이미지 저장 경로
+INPAINT_OUTPUT_PATH=./outputs/inpaint
+
 # 얼굴 임베딩 저장 경로
 FACES_PATH=./faces
 
 # Gradio 서버 설정
 GRADIO_SERVER_PORT=7860
+
+# Inpainting 모델 설정
+INPAINT_MODEL_PATH=TheImposterImposters/URPM-SD1.5-v2.3.inpainting
 ```
 
 ## 🎯 주요 특징
@@ -246,18 +297,28 @@ GRADIO_SERVER_PORT=7860
 - **스마트 인덱싱**: 박스 안쪽에 큰 폰트로 표시되는 직관적인 얼굴 번호
 - **고급 입 복원**: 혀나 입 안 물체 등 왜곡 방지를 위한 입 부분 원본 유지
 - **결과 관리**: 생성된 파일 삭제 및 화면 초기화 기능
+- **AI Inpainting**: 마스킹 도구와 프롬프트를 통한 고품질 이미지 생성
+- **프롬프트 템플릿**: 저장된 프롬프트 템플릿으로 빠른 설정
+- **화질 보존**: 마스크 기반 블렌딩으로 원본 영역 화질 100% 보존
+- **편집 모드**: 결과 이미지를 다시 편집하기 위한 원클릭 이동
 
 ### 🔧 기술적 특징
 - **SOLID 원칙 준수**: 유지보수 가능한 코드 구조
 - **TDD 개발**: 테스트 주도 개발 방식
 - **GPU 가속**: CUDA를 통한 고속 처리
 - **모듈화 설계**: 각 기능별 독립적인 서비스
+- **의존성 주입**: DI 컨테이너를 통한 서비스 관리
+- **Stable Diffusion**: HuggingFace Diffusers 라이브러리 활용
+- **마스크 기반 블렌딩**: 원본 화질 보존을 위한 고급 이미지 합성
 
 ### 📊 성능 최적화
 - **배치 처리**: 여러 얼굴 동시 처리
 - **메모리 효율성**: 필요한 모델만 로드
 - **캐싱**: 임베딩 데이터 재사용
 - **비동기 처리**: UI 응답성 향상
+- **파이프라인 재사용**: Inpainting 모델 한 번 로딩 후 재사용
+- **이미지 패딩**: 64픽셀 배수 최적화
+- **자동 스텝 보정**: Strength 값에 따른 최적 스텝 수 자동 계산
 
 ## 🛠️ 개발 가이드
 
@@ -282,9 +343,14 @@ GRADIO_SERVER_PORT=7860
 
 ### 권장 요구사항 (GPU)
 - **NVIDIA GPU**: GTX 1060 이상 (RTX 시리즈 권장)
-- **VRAM**: 6GB 이상 (8GB 이상 권장)
+- **VRAM**: 6GB 이상 (Inpainting 사용 시 8GB 이상 권장)
 - **CUDA**: 11.8 또는 12.1+
 - **RAM**: 16GB 이상
+
+### Inpainting 전용 요구사항
+- **VRAM**: 8GB 이상 (RTX 3070/4060 이상 권장)
+- **RAM**: 16GB 이상 (Stable Diffusion 모델 로딩)
+- **저장공간**: 추가 10GB (Inpainting 모델 및 결과 이미지)
 
 ## 🐛 문제 해결
 
@@ -306,6 +372,21 @@ GRADIO_SERVER_PORT=7860
 3. **메모리 부족**
    - GPU VRAM 부족 시 CPU 모드로 전환
    - 이미지 크기 축소
+
+4. **Inpainting 모델 로딩 실패**
+   ```bash
+   # HuggingFace 토큰 설정 (필요한 경우)
+   huggingface-cli login
+   
+   # 모델 수동 다운로드
+   python -c "from diffusers import StableDiffusionInpaintPipeline; StableDiffusionInpaintPipeline.from_pretrained('TheImposterImposters/URPM-SD1.5-v2.3.inpainting')"
+   ```
+
+5. **Inpainting 품질 문제**
+   - Guidance Scale: 7.0-12.0 범위에서 조정
+   - Inference Steps: 30-80 범위에서 조정
+   - Strength: 0.7-1.0 범위에서 조정
+   - Mask Blur: 4-8 범위에서 조정
 
 ## 📄 라이선스
 

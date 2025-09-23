@@ -2,6 +2,65 @@
 
 Face Swap Application의 변경 사항을 기록합니다.
 
+## [2.0.0] - 2024-09-23
+
+### 🎨 주요 신기능 - AI Inpainting
+
+#### ✨ 새로운 기능
+- **AI Inpainting 탭**: Stable Diffusion 기반 고품질 이미지 인페인팅
+  - HuggingFace Diffusers 라이브러리 활용
+  - `TheImposterImposters/URPM-SD1.5-v2.3.inpainting` 모델 사용
+  - 마스킹 도구로 수정 영역 지정
+  - Positive/Negative 프롬프트 지원
+- **프롬프트 관리 탭**: Inpainting용 프롬프트 템플릿 관리
+  - JSON 파일 기반 템플릿 저장/로드
+  - 카테고리별 프롬프트 분류
+  - 실시간 템플릿 추가/수정/삭제
+- **화질 보존 기술**: 마스크 기반 블렌딩으로 원본 영역 화질 100% 보존
+  - 마스크 영역만 AI 생성, 나머지는 원본 픽셀 유지
+  - VAE 인코딩/디코딩 손실 방지
+  - 자연스러운 경계 처리
+
+#### 🎛️ 고급 파라미터 제어
+- **Guidance Scale** (1.0-20.0): 프롬프트 따르기 강도 조절
+- **Inference Steps** (10-150): 생성 품질 vs 속도 조절
+- **Strength** (0.1-1.0): 마스크 영역 변경 강도 조절
+- **Mask Blur** (0-20): 마스크 경계 부드럽게 처리
+- **Mask Dilation** (0-50): 마스크 영역 픽셀 단위 확장
+- **자동 스텝 보정**: Strength 값에 따른 실제 수행 스텝 수 자동 계산
+
+#### 🔧 시스템 아키텍처 개선
+- **InpaintService**: 전용 Inpainting 서비스 클래스
+  - 파이프라인 재사용으로 메모리 효율성 향상
+  - 이미지 전처리 (패딩, 형식 변환) 자동화
+  - 마스크 기반 블렌딩 구현
+- **의존성 주입**: DIContainer에 InpaintService 통합
+- **환경 변수**: INPAINT_MODEL_PATH, INPAINT_OUTPUT_PATH 추가
+
+#### 🎨 사용자 경험 개선
+- **결과 관리**: 🗑️ 결과이미지 삭제, 📝 편집모드로 이동 버튼
+- **마스크 미리보기**: 생성된 마스크 실시간 확인
+- **자동 저장**: 생성 완료 시 자동 파일 저장
+- **상태 메시지**: 모든 파라미터와 저장 경로 표시
+- **파라미터 가이드**: UI에 각 파라미터 설명 포함
+
+### 📊 성능 최적화
+- **파이프라인 재사용**: Inpainting 모델 한 번 로딩 후 재사용
+- **이미지 패딩**: 64픽셀 배수 최적화로 처리 속도 향상
+- **메모리 관리**: 지연 로딩으로 필요 시에만 모델 로딩
+- **GPU 최적화**: CUDA 가속 지원
+
+### 📚 문서 업데이트
+- **README.md**: Inpainting 기능 및 새로운 탭 구조 반영
+- **INPAINTING_GUIDE.md**: 전용 Inpainting 사용 가이드 추가
+- **환경 설정**: 새로운 환경 변수 및 요구사항 문서화
+
+### 🏗️ 프로젝트 구조 개선
+- **src/services/inpaint_service.py**: 전용 Inpainting 서비스
+- **src/ui/components/inpainting_tab.py**: Inpainting UI 컴포넌트
+- **src/ui/components/prompt_manager_tab.py**: 프롬프트 관리 UI
+- **prompts/**: 프롬프트 템플릿 저장 디렉토리
+
 ## [1.2.0] - 2024-09-09
 
 ### 🎨 UI/UX 개선
