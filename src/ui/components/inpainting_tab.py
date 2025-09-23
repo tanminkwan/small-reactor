@@ -8,8 +8,9 @@ Inpainting UI만을 담당하는 컴포넌트
 import gradio as gr
 import numpy as np
 import cv2
+import json
 from pathlib import Path
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, List
 
 from src.services.file_manager import FileManager
 
@@ -25,6 +26,8 @@ class InpaintingTab:
             file_manager: 파일 관리 서비스
         """
         self.file_manager = file_manager
+        self.prompts_dir = Path("./prompts")
+        self.prompts_dir.mkdir(exist_ok=True)
     
     def create_interface(self) -> gr.Tab:
         """
@@ -58,7 +61,7 @@ class InpaintingTab:
                             label="이미지 업로드 (우클릭 후 편집 모드 선택)",
                             type="pil",
                             interactive=True,
-                            height=600,  # 높이를 600px로 설정
+                            height=400,  # 높이를 400px로 설정
                             sources=["upload"],
                             show_download_button=False,  # 불필요한 UI 제거
                             show_share_button=False,
@@ -70,10 +73,56 @@ class InpaintingTab:
                     **사용법:**
                     1. 이미지를 업로드하세요
                     2. 편집 모드에서 마스킹할 영역을 그리세요 (색칠한 부분이 inpainting 영역이 됩니다)
-                    3. '마스크 보기' 버튼을 눌러 바이너리 마스크를 확인하세요
+                    3. 프롬프트를 설정하세요 (등록된 프롬프트 선택 또는 직접 입력)
+                    4. '마스크 보기' 버튼을 눌러 바이너리 마스크를 확인하세요
                     
                     **마스크 형식:** 색칠한 부분은 흰색(255), 나머지는 검은색(0)으로 표시
                     """)
+                    
+                    # 프롬프트 입력 섹션
+                    gr.Markdown("### 📝 프롬프트 설정")
+                    
+                    # 등록된 프롬프트 선택 (자동 로드)
+                    with gr.Row():
+                        self.prompt_selector = gr.Dropdown(
+                            label="등록된 프롬프트 선택 (선택 시 자동 로드)",
+                            choices=self._get_saved_prompts(),
+                            value=None,
+                            interactive=True,
+                            scale=6,  # 4 → 6으로 더 길게
+                            max_choices=10,  # 드롭다운에서 최대 10개 항목 표시
+                            allow_custom_value=True  # 직접 입력도 가능
+                        )
+                        self.refresh_prompts_btn = gr.Button(
+                            "🔄 새로고침",
+                            size="sm", 
+                            scale=1
+                        )
+                    
+                    # Positive 프롬프트 입력
+                    self.positive_prompt = gr.Textbox(
+                        label="Positive 프롬프트",
+                        placeholder="생성하고 싶은 이미지에 대한 상세한 설명을 입력하세요...",
+                        lines=3,
+                        max_lines=5,
+                        interactive=True  # 편집 가능하도록 설정
+                    )
+                    
+                    # Negative 프롬프트 입력
+                    self.negative_prompt = gr.Textbox(
+                        label="Negative 프롬프트",
+                        placeholder="원하지 않는 요소들을 입력하세요...",
+                        lines=2,
+                        max_lines=4,
+                        interactive=True  # 편집 가능하도록 설정
+                    )
+                    
+                    # 프롬프트 관리 버튼들
+                    with gr.Row():
+                        self.clear_prompts_btn = gr.Button(
+                            "🗑️ 프롬프트 초기화",
+                            size="sm"
+                        )
                     
                     # 마스크 보기 버튼
                     self.tmp_save_button = gr.Button(
@@ -91,10 +140,10 @@ class InpaintingTab:
                         height=400  # 높이를 400px로 설정
                     )
                     
-                    # 마스크 상태 표시
+                    # 상태 표시
                     self.save_status = gr.Textbox(
-                        label="마스크 상태",
-                        value="마스킹을 그리고 '마스크 보기' 버튼을 눌러주세요.",
+                        label="상태",
+                        value="마스킹과 프롬프트를 설정한 후 '마스크 보기' 버튼을 눌러주세요.",
                         interactive=False
                     )
         
@@ -108,6 +157,27 @@ class InpaintingTab:
             fn=self._show_mask_result,
             inputs=[self.image_input],
             outputs=[self.result_display, self.save_status]
+        )
+        
+        # 프롬프트 관련 이벤트 핸들러
+        # 드롭다운 선택 시 자동으로 프롬프트 로드
+        self.prompt_selector.change(
+            fn=self._load_selected_prompt,
+            inputs=[self.prompt_selector],
+            outputs=[self.positive_prompt, self.negative_prompt, self.save_status]
+        )
+        
+        self.refresh_prompts_btn.click(
+            fn=self._refresh_prompt_list,
+            inputs=[],
+            outputs=[self.prompt_selector]
+        )
+        
+        # 프롬프트 초기화 버튼 클릭
+        self.clear_prompts_btn.click(
+            fn=self._clear_prompts,
+            inputs=[],
+            outputs=[self.positive_prompt, self.negative_prompt, self.prompt_selector, self.save_status]
         )
     
     def _show_mask_result(
@@ -263,4 +333,87 @@ class InpaintingTab:
         result = cv2.addWeighted(original_image, 1-alpha, overlay, alpha, 0)
         
         return result
+    
+    def _get_saved_prompts(self) -> List[str]:
+        """
+        저장된 프롬프트 파일들의 목록을 반환합니다.
+        
+        Returns:
+            프롬프트 파일명 목록 (확장자 제외)
+        """
+        try:
+            if not self.prompts_dir.exists():
+                return []
+            
+            json_files = list(self.prompts_dir.glob("*.json"))
+            return [f.stem for f in json_files]
+            
+        except Exception as e:
+            print(f"프롬프트 목록 조회 실패: {e}")
+            return []
+    
+    def _load_selected_prompt(
+        self, 
+        selected_prompt: str
+    ) -> Tuple[str, str, str]:
+        """
+        선택된 프롬프트를 로드합니다.
+        
+        Args:
+            selected_prompt: 선택된 프롬프트 파일명
+            
+        Returns:
+            Tuple[positive 프롬프트, negative 프롬프트, 상태 메시지]
+        """
+        try:
+            if not selected_prompt:
+                return "", "", "프롬프트를 선택해주세요."
+            
+            filepath = self.prompts_dir / f"{selected_prompt}.json"
+            
+            if not filepath.exists():
+                return "", "", f"❌ 파일을 찾을 수 없습니다: {selected_prompt}.json"
+            
+            # JSON 파일 읽기
+            with open(filepath, 'r', encoding='utf-8') as f:
+                prompt_data = json.load(f)
+            
+            positive = prompt_data.get("positive", "")
+            negative = prompt_data.get("negative", "")
+            title = prompt_data.get("title", selected_prompt)
+            
+            status = f"✅ 프롬프트를 불러왔습니다: {title}"
+            
+            return positive, negative, status
+            
+        except Exception as e:
+            return "", "", f"❌ 프롬프트 로드 중 오류가 발생했습니다: {str(e)}"
+    
+    def _refresh_prompt_list(self) -> gr.Dropdown:
+        """
+        프롬프트 목록을 새로고침합니다.
+        
+        Returns:
+            업데이트된 Dropdown 컴포넌트
+        """
+        try:
+            prompt_choices = self._get_saved_prompts()
+            return gr.Dropdown(choices=prompt_choices, value=None)
+        except Exception as e:
+            print(f"프롬프트 목록 새로고침 실패: {e}")
+            return gr.Dropdown(choices=[], value=None)
+    
+    def _clear_prompts(self) -> Tuple[str, str, gr.Dropdown, str]:
+        """
+        모든 프롬프트 입력을 초기화합니다.
+        
+        Returns:
+            Tuple[positive 초기화, negative 초기화, 드롭다운 초기화, 상태 메시지]
+        """
+        return (
+            "",  # positive_prompt 초기화
+            "",  # negative_prompt 초기화
+            gr.Dropdown(value=None),  # prompt_selector 초기화
+            "✅ 모든 프롬프트 입력이 초기화되었습니다."  # save_status
+        )
     
