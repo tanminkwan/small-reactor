@@ -1,0 +1,50 @@
+# CPU 전용 의존성 - Small Reactor
+# GPU 관련 패키지들을 제외한 CPU 최적화 버전
+
+# Core dependencies
+gradio>=4.0.0
+insightface>=0.7.3
+opencv-python>=4.8.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+
+# CodeFormer dependencies
+codeformer-pip>=0.0.4
+
+# AI/ML dependencies (CPU 최적화)
+#diffusers[torch]>=0.35.1
+#transformers>=4.56.1
+#accelerate>=1.10.1
+#safetensors>=0.6.2
+
+# ONNX Runtime (CPU 전용)
+onnxruntime>=1.15.0
+
+# PyTorch (CPU 전용)
+torch>=2.0.0+cpu --index-url https://download.pytorch.org/whl/cpu
+torchvision>=0.15.0+cpu --index-url https://download.pytorch.org/whl/cpu
+
+# CPU 최적화 추가 패키지
+# Intel MKL-DNN 최적화를 위한 추가 패키지 (선택적)
+# intel-extension-for-pytorch>=2.0.0  # Intel CPU 최적화
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+pytest-asyncio>=0.21.0
+pytest-xdist>=3.0.0
+pytest-html>=3.1.0
+pytest-benchmark>=4.0.0
+
+# Development dependencies
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
+pre-commit>=3.0.0
+
+# CPU 전용 설치 가이드:
+# pip install -r requirements-cpu.txt
+# 
+# Intel CPU 최적화를 원한다면:
+# pip install intel-extension-for-pytorch

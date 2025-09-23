@@ -12,6 +12,7 @@ from src.core.container import DIContainer
 from src.ui.components.face_extraction_tab import FaceExtractionTab
 from src.ui.components.face_swap_tab import FaceSwapTab
 from src.ui.components.embedding_list_tab import EmbeddingListTab
+from src.ui.components.inpainting_tab import InpaintingTab
 from src.ui.handlers.event_handlers import EventHandlers
 
 
@@ -36,6 +37,7 @@ class FaceManagerApp:
         self.face_extraction_tab = FaceExtractionTab(self.face_manager)
         self.face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
         self.embedding_list_tab = EmbeddingListTab(self.file_manager)
+        self.inpainting_tab = InpaintingTab(self.file_manager)
         
         # 이벤트 핸들러 초기화
         self.event_handlers = EventHandlers(self.face_manager, self.file_manager)
@@ -62,6 +64,12 @@ class FaceManagerApp:
             
             with self.embedding_list_tab.create_interface():
                 pass
+            
+            with self.inpainting_tab.create_interface():
+                pass
+            
+            # Inpainting 탭 이벤트 핸들러 설정 (독립적)
+            self.inpainting_tab.setup_event_handlers()
             
             # 이벤트 핸들러 설정
             self.event_handlers.setup_all_handlers(
@@ -116,6 +124,7 @@ class FaceManagerApp:
                 "face_extraction_tab": self.face_extraction_tab is not None,
                 "face_swap_tab": self.face_swap_tab is not None,
                 "embedding_list_tab": self.embedding_list_tab is not None,
+                "inpainting_tab": self.inpainting_tab is not None,
                 "event_handlers": self.event_handlers is not None
             }
         }
