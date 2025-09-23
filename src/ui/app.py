@@ -46,6 +46,18 @@ class FaceManagerApp:
         
         self._logger.info("FaceManagerApp 초기화 완료")
     
+    def _log_tab_selection(self, tab_name: str):
+        """
+        탭 선택 시 로깅하는 함수
+        
+        Args:
+            tab_name: 선택된 탭의 이름
+        """
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self._logger.info(f"[{timestamp}] 탭 선택됨: {tab_name}")
+        return f"현재 선택된 탭: {tab_name} ({timestamp})"
+    
     def create_interface(self) -> gr.Blocks:
         """
         전체 인터페이스를 생성합니다.
@@ -57,21 +69,50 @@ class FaceManagerApp:
             gr.Markdown("# 🎭 Face Manager")
             gr.Markdown("이미지에서 얼굴을 추출하고 embedding을 관리합니다.")
             
-            # 각 탭 생성
-            with self.face_swap_tab.create_interface():
-                pass
+            # 현재 선택된 탭 정보 표시 (숨김 처리)
+            current_tab_info = gr.Textbox(
+                value="현재 선택된 탭: Face Swap",
+                visible=False,
+                interactive=False
+            )
             
-            with self.face_extraction_tab.create_interface():
-                pass
+            # 각 탭 생성 및 객체 저장
+            tab_face_swap = self.face_swap_tab.create_interface()
+            tab_face_extraction = self.face_extraction_tab.create_interface()
+            tab_embedding_list = self.embedding_list_tab.create_interface()
+            tab_inpainting = self.inpainting_tab.create_interface()
+            tab_prompt_manager = self.prompt_manager_tab.create_interface()
             
-            with self.embedding_list_tab.create_interface():
-                pass
+            # 탭 선택 이벤트 핸들러 설정
+            tab_face_swap.select(
+                fn=lambda: self._log_tab_selection("Face Swap"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
             
-            with self.inpainting_tab.create_interface():
-                pass
+            tab_face_extraction.select(
+                fn=lambda: self._log_tab_selection("Face Extraction"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
             
-            with self.prompt_manager_tab.create_interface():
-                pass
+            tab_embedding_list.select(
+                fn=lambda: self._log_tab_selection("Embedding List"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
+            tab_inpainting.select(
+                fn=lambda: self._log_tab_selection("Inpainting"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
+            tab_prompt_manager.select(
+                fn=lambda: self._log_tab_selection("Prompt Manager"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
             
             # 독립적인 이벤트 핸들러 설정
             self.inpainting_tab.setup_event_handlers()

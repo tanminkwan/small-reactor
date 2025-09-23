@@ -59,7 +59,10 @@ class InpaintingTab:
                             type="pil",
                             interactive=True,
                             height=600,  # 높이를 600px로 설정
-                            sources=["upload", "webcam", "clipboard"]
+                            sources=["upload"],
+                            show_download_button=False,  # 불필요한 UI 제거
+                            show_share_button=False,
+                            mirror_webcam=False,
                         )
                     
                     # 사용법 안내
