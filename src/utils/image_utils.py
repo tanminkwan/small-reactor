@@ -146,7 +146,7 @@ def create_smooth_mask(mask: np.ndarray, blur_kernel: Tuple[int, int] = (15, 15)
 
 
 def load_sam_model(
-    model_path: str = "./sam_models",
+    model_path: str = "models/sam_models",
     model_type: str = "vit_h"
 ):
     """
