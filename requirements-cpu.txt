@@ -16,6 +16,7 @@ codeformer-pip>=0.0.4
 #transformers>=4.56.1
 #accelerate>=1.10.1
 #safetensors>=0.6.2
+segment-anything>=1.0
 
 # ONNX Runtime (CPU 전용)
 onnxruntime>=1.15.0
