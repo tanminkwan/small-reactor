@@ -31,6 +31,10 @@ class InpaintingTab:
         self.inpaint_service = inpaint_service
         self.prompts_dir = Path("./prompts")
         self.prompts_dir.mkdir(exist_ok=True)
+        
+        # Inpainting 기능 가용성 체크
+        self.is_inpaint_available = inpaint_service.is_available()
+        self.unavailable_reason = inpaint_service.get_unavailable_reason() if not self.is_inpaint_available else ""
     
     def create_interface(self) -> gr.Tab:
         """
@@ -186,10 +190,11 @@ class InpaintingTab:
                             scale=1
                         )
                         self.generate_button = gr.Button(
-                            "🎨 이미지 생성",
-                            variant="primary",
+                            "🎨 이미지 생성" if self.is_inpaint_available else "❌ Inpainting 사용 불가",
+                            variant="primary" if self.is_inpaint_available else "secondary",
                             size="lg",
-                            scale=2
+                            scale=2,
+                            interactive=self.is_inpaint_available
                         )
                 
                 with gr.Column(scale=2):  # 결과 영역을 중간 크기로 (scale=2)
@@ -225,9 +230,13 @@ class InpaintingTab:
                             )
                     
                     # 상태 표시
+                    initial_status = (
+                        self.unavailable_reason if not self.is_inpaint_available 
+                        else "마스킹과 프롬프트를 설정한 후 '마스크 보기' 버튼을 눌러주세요."
+                    )
                     self.save_status = gr.Textbox(
                         label="상태",
-                        value="마스킹과 프롬프트를 설정한 후 '마스크 보기' 버튼을 눌러주세요.",
+                        value=initial_status,
                         interactive=False
                     )
         
@@ -264,23 +273,42 @@ class InpaintingTab:
             outputs=[self.positive_prompt, self.negative_prompt, self.prompt_selector, self.save_status]
         )
         
-        # 이미지 생성 버튼 클릭
-        self.generate_button.click(
-            fn=self._generate_inpaint_image,
-            inputs=[
-                self.image_input,
-                self.positive_prompt,
-                self.negative_prompt,
-                self.guidance_scale,
-                self.num_inference_steps,
-                self.strength,
-                self.mask_blur
-            ],
-            outputs=[
-                self.output_image,
-                self.save_status
-            ]
-        )
+        # 이미지 생성 버튼 클릭 (사용 가능할 때만 실제 처리)
+        if self.is_inpaint_available:
+            self.generate_button.click(
+                fn=self._generate_inpaint_image,
+                inputs=[
+                    self.image_input,
+                    self.positive_prompt,
+                    self.negative_prompt,
+                    self.guidance_scale,
+                    self.num_inference_steps,
+                    self.strength,
+                    self.mask_blur
+                ],
+                outputs=[
+                    self.output_image,
+                    self.save_status
+                ]
+            )
+        else:
+            # Inpainting 사용 불가 시 에러 메시지만 표시
+            self.generate_button.click(
+                fn=lambda *args: (None, f"❌ {self.unavailable_reason}"),
+                inputs=[
+                    self.image_input,
+                    self.positive_prompt,
+                    self.negative_prompt,
+                    self.guidance_scale,
+                    self.num_inference_steps,
+                    self.strength,
+                    self.mask_blur
+                ],
+                outputs=[
+                    self.output_image,
+                    self.save_status
+                ]
+            )
         
         # 결과 이미지 삭제 버튼 클릭
         self.delete_result_btn.click(

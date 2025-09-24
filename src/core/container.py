@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from src.services.face_manager import FaceManager
 from src.services.file_manager import FileManager
 from src.services.inpaint_service import InpaintService
+from src.services.image_blend_service import ImageBlendService
 from src.utils.config import Config
 
 
@@ -34,6 +35,7 @@ class DIContainer:
         self._face_manager = None
         self._file_manager = None
         self._inpaint_service = None
+        self._image_blend_service = None
         
         # 서비스 초기화
         self._initialize_services()
@@ -60,6 +62,10 @@ class DIContainer:
             # InpaintService 초기화
             self._inpaint_service = InpaintService(self._config)
             self._logger.info("InpaintService 초기화 완료")
+            
+            # ImageBlendService 초기화
+            self._image_blend_service = ImageBlendService(self._config)
+            self._logger.info("ImageBlendService 초기화 완료")
             
         except Exception as e:
             self._logger.error(f"서비스 초기화 실패: {e}")
@@ -109,6 +115,17 @@ class DIContainer:
             raise RuntimeError("InpaintService가 초기화되지 않았습니다.")
         return self._inpaint_service
     
+    def get_image_blend_service(self) -> ImageBlendService:
+        """
+        ImageBlendService 인스턴스를 반환합니다.
+        
+        Returns:
+            ImageBlendService 인스턴스
+        """
+        if self._image_blend_service is None:
+            raise RuntimeError("ImageBlendService가 초기화되지 않았습니다.")
+        return self._image_blend_service
+    
     def is_initialized(self) -> bool:
         """
         모든 서비스가 초기화되었는지 확인합니다.
@@ -120,7 +137,8 @@ class DIContainer:
             self._config is not None and
             self._face_manager is not None and
             self._file_manager is not None and
-            self._inpaint_service is not None
+            self._inpaint_service is not None and
+            self._image_blend_service is not None
         )
     
     def get_service_info(self) -> dict:
@@ -135,6 +153,7 @@ class DIContainer:
             "face_manager_initialized": self._face_manager is not None,
             "file_manager_initialized": self._file_manager is not None,
             "inpaint_service_initialized": self._inpaint_service is not None,
+            "image_blend_service_initialized": self._image_blend_service is not None,
             "all_services_initialized": self.is_initialized()
         }
 

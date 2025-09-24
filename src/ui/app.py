@@ -13,6 +13,7 @@ from src.ui.components.face_extraction_tab import FaceExtractionTab
 from src.ui.components.face_swap_tab import FaceSwapTab
 from src.ui.components.embedding_list_tab import EmbeddingListTab
 from src.ui.components.inpainting_tab import InpaintingTab
+from src.ui.components.image_blend_tab import ImageBlendTab
 from src.ui.components.prompt_manager_tab import PromptManagerTab
 from src.ui.handlers.event_handlers import EventHandlers
 
@@ -34,12 +35,14 @@ class FaceManagerApp:
         self.face_manager = container.get_face_manager()
         self.file_manager = container.get_file_manager()
         self.inpaint_service = container.get_inpaint_service()
+        self.image_blend_service = container.get_image_blend_service()
         
         # 탭 컴포넌트들 초기화
         self.face_extraction_tab = FaceExtractionTab(self.face_manager)
         self.face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
         self.embedding_list_tab = EmbeddingListTab(self.file_manager)
         self.inpainting_tab = InpaintingTab(self.file_manager, self.inpaint_service)
+        self.image_blend_tab = ImageBlendTab(self.image_blend_service, self.file_manager)
         self.prompt_manager_tab = PromptManagerTab(self.file_manager)
         
         # 이벤트 핸들러 초기화
@@ -82,6 +85,7 @@ class FaceManagerApp:
             tab_face_extraction = self.face_extraction_tab.create_interface()
             tab_embedding_list = self.embedding_list_tab.create_interface()
             tab_inpainting = self.inpainting_tab.create_interface()
+            tab_image_blend = self.image_blend_tab.create_interface()
             tab_prompt_manager = self.prompt_manager_tab.create_interface()
             
             # 탭 선택 이벤트 핸들러 설정
@@ -109,6 +113,12 @@ class FaceManagerApp:
                 outputs=[current_tab_info]
             )
             
+            tab_image_blend.select(
+                fn=lambda: self._log_tab_selection("Image Blend"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
             tab_prompt_manager.select(
                 fn=lambda: self._log_tab_selection("Prompt Manager"),
                 inputs=[],
@@ -117,6 +127,7 @@ class FaceManagerApp:
             
             # 독립적인 이벤트 핸들러 설정
             self.inpainting_tab.setup_event_handlers()
+            self.image_blend_tab.setup_event_handlers()
             self.prompt_manager_tab.setup_event_handlers()
             
             # 이벤트 핸들러 설정
@@ -173,6 +184,7 @@ class FaceManagerApp:
                 "face_swap_tab": self.face_swap_tab is not None,
                 "embedding_list_tab": self.embedding_list_tab is not None,
                 "inpainting_tab": self.inpainting_tab is not None,
+                "image_blend_tab": self.image_blend_tab is not None,
                 "prompt_manager_tab": self.prompt_manager_tab is not None,
                 "event_handlers": self.event_handlers is not None
             }

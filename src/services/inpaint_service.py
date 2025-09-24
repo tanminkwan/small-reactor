@@ -7,14 +7,22 @@ Single Responsibility Principle (SRP)에 따라 inpainting 기능만을 담당
 
 import cv2
 import numpy as np
-import torch
-from diffusers import StableDiffusionInpaintPipeline
 from PIL import Image
 from typing import Optional, Tuple
 import logging
 from pathlib import Path
 
 from src.utils.config import Config
+
+# GPU 사용 시에만 관련 라이브러리 import
+try:
+    import torch
+    from diffusers import StableDiffusionInpaintPipeline
+    DIFFUSERS_AVAILABLE = True
+except ImportError:
+    torch = None
+    StableDiffusionInpaintPipeline = None
+    DIFFUSERS_AVAILABLE = False
 
 
 class InpaintService:
@@ -30,6 +38,36 @@ class InpaintService:
         self.config = config
         self._logger = logging.getLogger(__name__)
         self._pipeline: Optional[StableDiffusionInpaintPipeline] = None
+        self.is_gpu_enabled = config.get("use_gpu", True)
+        
+        # GPU가 비활성화되어 있거나 diffusers가 없는 경우 경고
+        if not self.is_gpu_enabled:
+            self._logger.info("GPU가 비활성화되어 있어서 Inpainting 기능이 제한됩니다.")
+        elif not DIFFUSERS_AVAILABLE:
+            self._logger.warning("diffusers 라이브러리가 설치되지 않아 Inpainting 기능을 사용할 수 없습니다.")
+    
+    def is_available(self) -> bool:
+        """
+        Inpainting 기능이 사용 가능한지 확인합니다.
+        
+        Returns:
+            사용 가능 여부
+        """
+        return self.is_gpu_enabled and DIFFUSERS_AVAILABLE
+    
+    def get_unavailable_reason(self) -> str:
+        """
+        Inpainting 기능이 사용 불가능한 이유를 반환합니다.
+        
+        Returns:
+            사용 불가능한 이유
+        """
+        if not self.is_gpu_enabled:
+            return "GPU가 비활성화되어 있습니다. USE_GPU=true로 설정해주세요."
+        elif not DIFFUSERS_AVAILABLE:
+            return "diffusers 라이브러리가 설치되지 않았습니다. pip install diffusers로 설치해주세요."
+        else:
+            return "Inpainting 기능을 사용할 수 있습니다."
         
     def _initialize_pipeline(self) -> None:
         """
@@ -37,6 +75,13 @@ class InpaintService:
         """
         if self._pipeline is not None:
             return
+        
+        # GPU가 비활성화되어 있거나 diffusers가 없으면 초기화하지 않음
+        if not self.is_gpu_enabled:
+            raise RuntimeError("GPU가 비활성화되어 있어서 Inpainting 기능을 사용할 수 없습니다.")
+        
+        if not DIFFUSERS_AVAILABLE:
+            raise RuntimeError("diffusers 라이브러리가 설치되지 않아 Inpainting 기능을 사용할 수 없습니다.")
             
         try:
             model_path = self.config.get("inpaint_model_path")
@@ -219,8 +264,8 @@ class InpaintService:
             del self._pipeline
             self._pipeline = None
             
-            # GPU 메모리 정리
-            if torch.cuda.is_available():
+            # GPU 메모리 정리 (torch가 있을 때만)
+            if torch is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 
             self._logger.info("Inpaint 파이프라인 리소스 정리 완료")

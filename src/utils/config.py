@@ -54,6 +54,7 @@ class Config:
             # 출력 경로 설정
             "output_path": self._get_str("OUTPUT_PATH", "./output"),
             "inpaint_output_path": self._get_str("INPAINT_OUTPUT_PATH", "./output/inpaint"),
+            "image_blend_output_path": self._get_str("IMAGE_BLEND_OUTPUT_PATH", "./output/image_blend"),
         }
     
     def _get_str(self, key: str, default: str) -> str:

@@ -6,7 +6,17 @@
 """
 
 from .config import Config
+from .image_utils import (
+    match_and_blend_images, 
+    seamless_blend, 
+    alpha_blend, 
+    create_smooth_mask
+)
 
 __all__ = [
-    "Config"
+    "Config",
+    "match_and_blend_images",
+    "seamless_blend", 
+    "alpha_blend",
+    "create_smooth_mask"
 ]
