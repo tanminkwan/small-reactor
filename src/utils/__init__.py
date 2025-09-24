@@ -7,16 +7,20 @@
 
 from .config import Config
 from .image_utils import (
-    match_and_blend_images, 
-    seamless_blend, 
-    alpha_blend, 
-    create_smooth_mask
+    match_and_blend_images,
+    seamless_blend,
+    alpha_blend,
+    create_smooth_mask,
+    load_sam_model,
+    extract_object_with_sam
 )
 
 __all__ = [
     "Config",
     "match_and_blend_images",
-    "seamless_blend", 
+    "seamless_blend",
     "alpha_blend",
-    "create_smooth_mask"
+    "create_smooth_mask",
+    "load_sam_model",
+    "extract_object_with_sam"
 ]

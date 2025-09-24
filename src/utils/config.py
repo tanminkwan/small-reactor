@@ -55,6 +55,10 @@ class Config:
             "output_path": self._get_str("OUTPUT_PATH", "./output"),
             "inpaint_output_path": self._get_str("INPAINT_OUTPUT_PATH", "./output/inpaint"),
             "image_blend_output_path": self._get_str("IMAGE_BLEND_OUTPUT_PATH", "./output/image_blend"),
+            
+            # SAM 모델 설정
+            "sam_model_path": self._get_str("SAM_MODEL_PATH", "./sam_models"),
+            "sam_model_type": self._get_str("SAM_MODEL_TYPE", "vit_h"),
         }
     
     def _get_str(self, key: str, default: str) -> str:
