@@ -53,10 +53,10 @@ class ImageBlendTab:
                         height=400
                     )
                     
-                    # 부분 이미지 업로드
+                    # 부분 이미지 업로드 (투명도 보존을 위해 numpy 사용)
                     self.patch_image_upload = gr.Image(
-                        label="부분 이미지 (원본에 붙일 이미지)",
-                        type="pil",
+                        label="부분 이미지 (원본에 붙일 이미지) - PNG 투명 이미지 지원",
+                        type="numpy",
                         height=400
                     )
                     
@@ -129,20 +129,26 @@ class ImageBlendTab:
                     gr.Markdown("""
                     ### 💡 사용 팁
                     
-                    **마스크 두께:**
+                    **✨ Alpha 채널 자동 지원:**
+                    - **RGBA/PNG 투명 이미지**: 부분 이미지가 투명 영역을 가지면 자동으로 Alpha 채널 블렌딩 적용
+                    - **투명 영역**: 원본 이미지가 완전히 보임
+                    - **반투명 영역**: 원본과 부분 이미지가 비례적으로 블렌딩
+                    - **불투명 영역**: 부분 이미지가 완전히 보임
+                    
+                    **마스크 두께:** (Alpha 채널이 없는 경우에만 사용)
                     - 작은 값(3-10): 얇은 경계, 빠른 처리
                     - 중간 값(10-25): 자연스러운 블렌딩
                     - 큰 값(25-50): 부드러운 경계, 넓은 블렌딩
                     
-                    **경계 보정 방법:**
+                    **경계 보정 방법:** (Alpha 채널이 없는 경우에만 사용)
                     - **Alpha Blending**: 가장 안정적이고 자연스러움 (권장)
                     - **Seamless Cloning**: 고품질이지만 느림, 실패 가능성
                     - **기본 결합**: 블렌딩 없음, 빠름
                     
                     **최적 결과를 위한 팁:**
+                    - **PNG 투명 이미지**: 최상의 결과 (Alpha 채널 자동 활용)
                     - 부분 이미지가 원본에 잘 맞는 크기여야 함
                     - 조명과 색상이 비슷할 때 최상의 결과
-                    - Alpha Blending + 마스크 두께 15px 권장
                     """, elem_classes=["help-section"])
         
         return tab
@@ -185,7 +191,7 @@ class ImageBlendTab:
     def _blend_images(
         self,
         original_image: Image.Image,
-        patch_image: Image.Image,
+        patch_image: np.ndarray,
         border_thickness: int,
         blend_method: str
     ) -> Tuple[Optional[Image.Image], str]:

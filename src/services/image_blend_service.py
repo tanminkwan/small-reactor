@@ -54,7 +54,7 @@ class ImageBlendService:
         
         Args:
             original_image: 원본 이미지 (PIL Image)
-            patch_image: 부분 이미지 (PIL Image)  
+            patch_image: 부분 이미지 (numpy array) - RGBA 투명도 지원  
             border_thickness: 경계 테두리 굵기
             blend_method: 경계 보정 방법 ("alpha", "seamless", "basic")
             
@@ -65,7 +65,7 @@ class ImageBlendService:
             if original_image is None or patch_image is None:
                 return None, "❌ 원본 이미지와 부분 이미지를 모두 입력해주세요."
             
-            # PIL Image를 numpy array로 변환
+            # 원본 이미지 처리 (항상 RGB)
             if hasattr(original_image, 'convert'):
                 original_array = np.array(original_image.convert('RGB'))
                 original_bgr = cv2.cvtColor(original_array, cv2.COLOR_RGB2BGR)
@@ -74,57 +74,104 @@ class ImageBlendService:
                 if len(original_bgr.shape) == 3 and original_bgr.shape[2] == 3:
                     original_bgr = cv2.cvtColor(original_bgr, cv2.COLOR_RGB2BGR)
             
-            if hasattr(patch_image, 'convert'):
-                patch_array = np.array(patch_image.convert('RGB'))
-                patch_bgr = cv2.cvtColor(patch_array, cv2.COLOR_RGB2BGR)
+            # 부분 이미지 처리 (numpy array 직접 처리)
+            patch_alpha_mask = None
+            
+            # numpy array 입력 처리
+            if isinstance(patch_image, np.ndarray):
+                patch_array = patch_image
             else:
-                patch_bgr = np.array(patch_image)
-                if len(patch_bgr.shape) == 3 and patch_bgr.shape[2] == 3:
-                    patch_bgr = cv2.cvtColor(patch_bgr, cv2.COLOR_RGB2BGR)
+                # PIL 이미지인 경우 numpy로 변환
+                patch_array = np.array(patch_image)
+            
+            # Alpha 채널 확인 (4채널 RGBA)
+            if len(patch_array.shape) == 3 and patch_array.shape[2] == 4:
+                # RGBA 이미지
+                patch_alpha_mask = patch_array[:, :, 3]
+                patch_rgb = patch_array[:, :, :3]
+                patch_bgr = cv2.cvtColor(patch_rgb, cv2.COLOR_RGB2BGR)
+                
+                # 투명도가 실제로 있는지 확인
+                if np.all(patch_alpha_mask == 255):
+                    # 모든 픽셀이 불투명하면 alpha 채널 무시
+                    patch_alpha_mask = None
+            
+            elif len(patch_array.shape) == 3 and patch_array.shape[2] == 3:
+                # RGB 이미지 - 검은색 영역을 투명으로 간주할지 확인
+                patch_bgr = cv2.cvtColor(patch_array, cv2.COLOR_RGB2BGR)
+                
+                # 검은색 영역이 많으면 투명 이미지가 RGB로 변환된 것으로 간주
+                black_pixels = np.sum(np.all(patch_array == [0, 0, 0], axis=2))
+                total_pixels = patch_array.shape[0] * patch_array.shape[1]
+                black_ratio = black_pixels / total_pixels
+                
+                # 검은색 픽셀이 10% 이상이면 투명 이미지로 간주 (PNG→RGB 변환 시 투명→검은색)
+                if black_ratio > 0.1:
+                    # 검은색이 아닌 픽셀을 불투명(255), 검은색 픽셀을 투명(0)으로 설정
+                    patch_alpha_mask = np.where(
+                        np.all(patch_array == [0, 0, 0], axis=2), 
+                        0,    # 검은색 → 투명
+                        255   # 비검은색 → 불투명
+                    ).astype(np.uint8)
+            
+            else:
+                # 지원되지 않는 형식
+                self._logger.error(f"지원되지 않는 이미지 형식: {patch_array.shape}")
+                return None, f"❌ 지원되지 않는 이미지 형식입니다: {patch_array.shape}"
             
             self._logger.info(f"이미지 결합 시작 - 원본: {original_bgr.shape}, 부분: {patch_bgr.shape}")
-            self._logger.info(f"설정 - border_thickness: {border_thickness}, blend_method: {blend_method}")
             
-            # 1단계: 템플릿 매칭 및 기본 결합
-            result_image, border_mask = match_and_blend_images(
-                original_bgr, patch_bgr, border_thickness
-            )
             
-            # 2단계: 선택된 방법으로 경계 보정
-            if blend_method == "alpha":
-                # Alpha blending
-                smooth_border_mask = create_smooth_mask(border_mask, blur_kernel=(21, 21))
-                final_result = alpha_blend(original_bgr, result_image, smooth_border_mask)
+            # Alpha 채널이 있는 경우 특별 처리
+            if patch_alpha_mask is not None:
+                # Alpha 채널을 고려한 블렌딩
+                result_image, final_mask = self._blend_with_alpha_channel(
+                    original_bgr, patch_bgr, patch_alpha_mask, border_thickness
+                )
                 
-            elif blend_method == "seamless":
-                # Seamless cloning (fallback to alpha if failed)
-                try:
-                    from src.utils.image_utils import seamless_blend
-                    
-                    # 템플릿 매칭 결과 재계산
-                    match_result = cv2.matchTemplate(original_bgr, patch_bgr, cv2.TM_CCOEFF_NORMED)
-                    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_result)
-                    
-                    top_left = max_loc
-                    h, w = patch_bgr.shape[:2]
-                    center_x = top_left[0] + w // 2
-                    center_y = top_left[1] + h // 2
-                    center = (center_x, center_y)
-                    
-                    # Seamless cloning용 마스크 생성
-                    seamless_mask = np.zeros(original_bgr.shape[:2], dtype=np.uint8)
-                    cv2.rectangle(seamless_mask, top_left, (top_left[0] + w, top_left[1] + h), 255, -1)
-                    
-                    # Seamless cloning 실행
-                    final_result = seamless_blend(result_image, original_bgr, seamless_mask, center)
-                    
-                except Exception as e:
-                    self._logger.warning(f"Seamless cloning 실패, Alpha blending으로 대체: {e}")
+                final_result = result_image
+                
+            else:
+                # 1단계: 템플릿 매칭 및 기본 결합 (기존 로직)
+                result_image, border_mask = match_and_blend_images(
+                    original_bgr, patch_bgr, border_thickness
+                )
+                
+                # 2단계: 선택된 방법으로 경계 보정 (기존 로직)
+                if blend_method == "alpha":
+                    # Alpha blending
                     smooth_border_mask = create_smooth_mask(border_mask, blur_kernel=(21, 21))
                     final_result = alpha_blend(original_bgr, result_image, smooth_border_mask)
                     
-            else:  # basic
-                final_result = result_image
+                elif blend_method == "seamless":
+                    # Seamless cloning (fallback to alpha if failed)
+                    try:
+                        from src.utils.image_utils import seamless_blend
+                        
+                        # 템플릿 매칭 결과 재계산
+                        match_result = cv2.matchTemplate(original_bgr, patch_bgr, cv2.TM_CCOEFF_NORMED)
+                        min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_result)
+                        
+                        top_left = max_loc
+                        h, w = patch_bgr.shape[:2]
+                        center_x = top_left[0] + w // 2
+                        center_y = top_left[1] + h // 2
+                        center = (center_x, center_y)
+                        
+                        # Seamless cloning용 마스크 생성
+                        seamless_mask = np.zeros(original_bgr.shape[:2], dtype=np.uint8)
+                        cv2.rectangle(seamless_mask, top_left, (top_left[0] + w, top_left[1] + h), 255, -1)
+                        
+                        # Seamless cloning 실행
+                        final_result = seamless_blend(result_image, original_bgr, seamless_mask, center)
+                        
+                    except Exception as e:
+                        self._logger.warning(f"Seamless cloning 실패, Alpha blending으로 대체: {e}")
+                        smooth_border_mask = create_smooth_mask(border_mask, blur_kernel=(21, 21))
+                        final_result = alpha_blend(original_bgr, result_image, smooth_border_mask)
+                        
+                else:  # basic
+                    final_result = result_image
             
             # BGR to RGB 변환 후 PIL Image로 변환
             final_rgb = cv2.cvtColor(final_result, cv2.COLOR_BGR2RGB)
@@ -133,7 +180,11 @@ class ImageBlendService:
             # 자동 저장
             saved_path = self.save_image(final_result)
             
-            status_message = f"✅ 이미지 결합 완료!\n방법: {blend_method}, 테두리 굵기: {border_thickness}px\n저장 위치: {saved_path}"
+            # 상태 메시지 생성
+            if patch_alpha_mask is not None:
+                status_message = f"✅ PNG 투명 이미지 결합 완료!\n투명 영역에서 원본 이미지 보존됨\n저장 위치: {saved_path}"
+            else:
+                status_message = f"✅ 이미지 결합 완료!\n방법: {blend_method}, 테두리 굵기: {border_thickness}px\n저장 위치: {saved_path}"
             
             return final_pil, status_message
             
@@ -224,6 +275,105 @@ class ImageBlendService:
             "seamless", # Seamless Cloning  
             "basic"     # 기본 결합 (블렌딩 없음)
         ]
+    
+    def _blend_with_alpha_channel(
+        self, 
+        original_bgr: np.ndarray, 
+        patch_bgr: np.ndarray, 
+        patch_alpha: np.ndarray, 
+        border_thickness: int = 15
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Alpha 채널을 가진 부분 이미지를 원본 이미지와 블렌딩합니다.
+        투명한 영역(alpha=0)에서는 원본이 보이고, 불투명한 영역(alpha=255)에서는 부분 이미지가 보입니다.
+        
+        Args:
+            original_bgr: 원본 이미지 (H, W, 3) - BGR 형식
+            patch_bgr: 부분 이미지 (H, W, 3) - BGR 형식  
+            patch_alpha: 부분 이미지의 alpha 채널 (H, W) - 0~255
+            border_thickness: 경계 부드럽게 처리할 두께
+            
+        Returns:
+            Tuple[블렌딩된 이미지, 사용된 마스크]
+        """
+        try:
+            # 1단계: 템플릿 매칭으로 최적 위치 찾기
+            match_result = cv2.matchTemplate(original_bgr, patch_bgr, cv2.TM_CCOEFF_NORMED)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(match_result)
+            
+            # 최고 매칭 위치
+            top_left = max_loc
+            patch_h, patch_w = patch_bgr.shape[:2]
+            orig_h, orig_w = original_bgr.shape[:2]
+            
+            # 2단계: 안전한 블렌딩 영역 계산 (경계 검사)
+            start_x = max(0, top_left[0])
+            start_y = max(0, top_left[1])
+            end_x = min(orig_w, top_left[0] + patch_w)
+            end_y = min(orig_h, top_left[1] + patch_h)
+            
+            valid_w = end_x - start_x
+            valid_h = end_y - start_y
+            
+            if valid_w <= 0 or valid_h <= 0:
+                return original_bgr, np.zeros(original_bgr.shape[:2], dtype=np.uint8)
+            
+            # 3단계: 결과 이미지 생성 (원본 이미지 복사)
+            result_image = original_bgr.copy()
+            
+            # 4단계: 부분 이미지에서 유효한 영역 추출
+            patch_offset_x = start_x - top_left[0]
+            patch_offset_y = start_y - top_left[1]
+            
+            valid_patch_bgr = patch_bgr[
+                patch_offset_y:patch_offset_y + valid_h,
+                patch_offset_x:patch_offset_x + valid_w
+            ]
+            valid_patch_alpha = patch_alpha[
+                patch_offset_y:patch_offset_y + valid_h,
+                patch_offset_x:patch_offset_x + valid_w
+            ]
+            
+            # 5단계: 원본 이미지에서 해당 영역 추출
+            original_region = result_image[start_y:end_y, start_x:end_x]
+            
+            # 6단계: Alpha 채널 처리
+            # Alpha 값을 0-1 범위로 정규화
+            alpha_normalized = valid_patch_alpha.astype(np.float32) / 255.0
+            
+            # 경계 부드럽게 처리 (약간의 가우시안 블러 적용)
+            if border_thickness > 0:
+                kernel_size = min(border_thickness * 2 + 1, min(valid_h, valid_w))
+                if kernel_size >= 3:
+                    alpha_smooth = cv2.GaussianBlur(alpha_normalized, (kernel_size, kernel_size), 0)
+                else:
+                    alpha_smooth = alpha_normalized
+            else:
+                alpha_smooth = alpha_normalized
+            
+            # 3채널로 확장 (BGR에 맞춤)
+            alpha_3d = np.repeat(alpha_smooth[:, :, np.newaxis], 3, axis=2)
+            
+            # 7단계: Alpha 블렌딩 수행
+            # 중요: alpha=0일 때 원본이 100% 보이고, alpha=1일 때 부분 이미지가 100% 보임
+            blended_region = (
+                original_region.astype(np.float32) * (1.0 - alpha_3d) + 
+                valid_patch_bgr.astype(np.float32) * alpha_3d
+            ).astype(np.uint8)
+            
+            # 8단계: 결과 이미지에 블렌딩된 영역 적용
+            result_image[start_y:end_y, start_x:end_x] = blended_region
+            
+            # 9단계: 사용된 마스크 반환 (전체 이미지 크기)
+            full_alpha_mask = np.zeros(original_bgr.shape[:2], dtype=np.uint8)
+            full_alpha_mask[start_y:end_y, start_x:end_x] = (alpha_smooth * 255).astype(np.uint8)
+            
+            return result_image, full_alpha_mask
+            
+        except Exception as e:
+            self._logger.error(f"Alpha 채널 블렌딩 중 오류: {e}")
+            # 오류 발생 시 원본 이미지 반환
+            return original_bgr, np.zeros(original_bgr.shape[:2], dtype=np.uint8)
 
 
 if __name__ == "__main__":
