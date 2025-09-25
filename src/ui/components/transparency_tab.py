@@ -45,11 +45,11 @@ class TransparencyTab:
             
             with gr.Row():
                 with gr.Column(scale=3):  # 이미지 영역을 더 크게 (scale=3)
-                    # 이미지 업로드 및 마스킹 영역
+                    # 이미지 업로드 및 투명화 영역 지정
                     try:
                         # ImageEditor가 있다면 사용
                         self.image_input = gr.ImageEditor(
-                            label="이미지 업로드 및 마스킹 (편집 모드에서 브러시로 투명화할 영역 그리기)",
+                            label="이미지 업로드 및 투명화 영역 지정 (편집 모드에서 브러시로 투명화할 영역 그리기)",
                             type="pil",
                             interactive=True,
                             height=600,  # 높이를 600px로 설정
@@ -78,7 +78,9 @@ class TransparencyTab:
                     2. 편집 모드에서 투명화할 영역을 브러시로 그리세요 (색칠한 부분이 투명해집니다)
                     3. '투명화 생성' 버튼을 눌러 투명 이미지를 생성하세요
                     
-                    **특징:** 브러시로 칠한 영역이 직접 투명화됩니다 (마스크 추출 과정 없음)
+                    **특징:** 
+                    - 브러시로 칠한 영역이 직접 투명화됩니다 (마스크 추출 과정 없음)
+                    - 이미 알파 채널이 있는 이미지 업로드 시 하얀색으로 변환된 투명 영역을 자동 복원합니다
                     """)
                     
                     # 파라미터 설정
@@ -122,11 +124,17 @@ class TransparencyTab:
                         
                         # 결과 이미지 관리 버튼
                         with gr.Row():
+                            self.copy_to_clipboard_btn = gr.Button(
+                                "📋 클립보드 복사",
+                                variant="secondary",
+                                size="sm"
+                            )
                             self.delete_result_btn = gr.Button(
                                 "🗑️ 결과이미지 삭제",
                                 variant="secondary",
                                 size="sm"
                             )
+                        with gr.Row():
                             self.move_to_edit_btn = gr.Button(
                                 "📝 편집모드로 이동",
                                 variant="secondary",
@@ -159,6 +167,13 @@ class TransparencyTab:
                 self.transparency_strength
             ],
             outputs=[self.output_image, self.save_status]
+        )
+        
+        # 클립보드 복사 버튼 클릭
+        self.copy_to_clipboard_btn.click(
+            fn=self._copy_to_clipboard,
+            inputs=[self.output_image],
+            outputs=[self.save_status]
         )
         
         # 결과이미지 삭제 버튼 클릭
@@ -290,6 +305,9 @@ class TransparencyTab:
             
             print(f"🔍 원본 이미지 모드: {rgba_image.mode}, 크기: {rgba_image.size}")
             
+            # ImageEditor에서 투명 영역이 하얀색으로 변환된 경우를 처리
+            rgba_image = self._convert_white_to_transparent(rgba_image)
+            
             # 마스크 데이터에서 브러시 영역 감지 (Inpainting 탭 방식)
             brush_mask = None
             
@@ -312,10 +330,10 @@ class TransparencyTab:
             else:
                 print("❌ 마스크 데이터가 없음")
             
-            # 브러시 영역이 없으면 None 반환
+            # 브러시 영역이 없으면 하얀색→투명 변환만 적용한 이미지 반환
             if brush_mask is None or not np.any(brush_mask):
-                print("❌ 브러시 영역을 찾을 수 없음")
-                return None
+                print("❌ 브러시 영역을 찾을 수 없음 - 하얀색→투명 변환만 적용")
+                return rgba_image
             
             print(f"✅ 브러시 영역 감지 완료: {np.sum(brush_mask)}개 픽셀")
             
@@ -419,6 +437,51 @@ class TransparencyTab:
         except Exception as e:
             print(f"❌ 저장 실패: {e}")
             return None
+    
+    def _copy_to_clipboard(self, output_image) -> str:
+        """결과 이미지를 클립보드에 복사합니다."""
+        try:
+            if output_image is None:
+                return "❌ 복사할 결과 이미지가 없습니다."
+            
+            # PIL 이미지를 클립보드에 복사
+            import io
+            import subprocess
+            import tempfile
+            import os
+            
+            # 임시 파일로 저장
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                output_image.save(temp_file.name, 'PNG')
+                temp_path = temp_file.name
+            
+            try:
+                # Windows 환경에서 클립보드에 이미지 복사
+                if os.name == 'nt':  # Windows
+                    # PowerShell을 사용하여 클립보드에 이미지 복사
+                    powershell_cmd = f'''
+                    Add-Type -AssemblyName System.Windows.Forms
+                    Add-Type -AssemblyName System.Drawing
+                    $image = [System.Drawing.Image]::FromFile("{temp_path}")
+                    [System.Windows.Forms.Clipboard]::SetImage($image)
+                    $image.Dispose()
+                    '''
+                    subprocess.run(['powershell', '-Command', powershell_cmd], 
+                                 check=True, capture_output=True, text=True)
+                    return "✅ 결과 이미지가 클립보드에 복사되었습니다!"
+                else:
+                    # Linux/Mac의 경우 (기본적인 지원)
+                    return "❌ 현재 운영체제에서는 클립보드 복사를 지원하지 않습니다."
+                    
+            finally:
+                # 임시 파일 삭제
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                    
+        except subprocess.CalledProcessError as e:
+            return f"❌ 클립보드 복사 실패: PowerShell 명령 실행 오류"
+        except Exception as e:
+            return f"❌ 클립보드 복사 중 오류가 발생했습니다: {str(e)}"
     
     def _delete_result_image_with_visibility(self) -> Tuple[gr.update, str]:
         """결과 이미지를 삭제합니다."""
@@ -542,3 +605,49 @@ class TransparencyTab:
                     checkerboard[y, x] = 200  # 어두운 회색
         
         return checkerboard
+    
+    def _convert_white_to_transparent(self, image: Image.Image) -> Image.Image:
+        """
+        ImageEditor에서 투명 영역이 하얀색으로 변환된 경우를 처리합니다.
+        정확히 하얀색 (255,255,255) 픽셀만을 투명으로 변환합니다.
+        
+        Args:
+            image: 처리할 RGBA 이미지
+            
+        Returns:
+            하얀색 영역이 투명으로 변환된 이미지
+        """
+        try:
+            if image.mode != 'RGBA':
+                return image
+            
+            rgba_array = np.array(image)
+            height, width = rgba_array.shape[:2]
+            
+            print(f"🔍 정확한 하얀색(255,255,255)→투명 변환 시작")
+            
+            # 정확히 (255,255,255)인 픽셀만 감지
+            rgb_channels = rgba_array[:, :, :3]
+            white_mask = (rgb_channels[:, :, 0] == 255) & \
+                        (rgb_channels[:, :, 1] == 255) & \
+                        (rgb_channels[:, :, 2] == 255)
+            
+            white_pixel_count = np.sum(white_mask)
+            total_pixels = width * height
+            white_ratio = white_pixel_count / total_pixels * 100
+            
+            print(f"🔍 정확한 하얀색 픽셀 감지: {white_pixel_count}개 ({white_ratio:.1f}%)")
+            
+            # 하얀색 픽셀이 전체의 1% 이상인 경우에만 변환 적용
+            if white_ratio >= 1.0:
+                # 하얀색 영역을 투명으로 변환
+                rgba_array[white_mask, 3] = 0  # Alpha를 0으로 설정
+                print(f"✅ 하얀색→투명 변환 완료: {white_pixel_count}개 픽셀")
+            else:
+                print(f"ℹ️ 하얀색 픽셀이 적어 변환 생략 ({white_ratio:.1f}% < 1%)")
+            
+            return Image.fromarray(rgba_array, 'RGBA')
+            
+        except Exception as e:
+            print(f"❌ 하얀색→투명 변환 오류: {e}")
+            return image
