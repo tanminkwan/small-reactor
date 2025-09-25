@@ -14,6 +14,7 @@ from src.ui.components.face_extraction_tab import FaceExtractionTab
 from src.ui.components.face_swap_tab import FaceSwapTab
 from src.ui.components.embedding_list_tab import EmbeddingListTab
 from src.ui.utils.ui_helpers import UIHelpers
+from src.utils.file_utils import open_save_location, get_save_location_status
 
 
 class EventHandlers:
@@ -107,6 +108,13 @@ class EventHandlers:
             fn=self._move_to_target_wrapper,
             inputs=[],
             outputs=[tab.swap_result_text, tab.target_upload, tab.original_image]
+        )
+        
+        # 저장 위치 확인 버튼 클릭 시 처리
+        tab.save_location_btn.click(
+            fn=self._show_save_location_wrapper,
+            inputs=[],
+            outputs=[tab.swap_result_text]
         )
         
         # 얼굴 교체 탭의 새로고침 버튼 클릭 시 처리
@@ -226,3 +234,13 @@ class EventHandlers:
         face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
         success, message, target_image, original_image = face_swap_tab.move_result_to_target()
         return message, target_image, original_image
+    
+    def _show_save_location_wrapper(self) -> str:
+        """
+        저장 위치 확인 래퍼
+        
+        Returns:
+            저장 위치 열기 결과 메시지
+        """
+        face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
+        return face_swap_tab.show_save_location()

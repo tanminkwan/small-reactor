@@ -15,6 +15,8 @@ from src.ui.components.embedding_list_tab import EmbeddingListTab
 from src.ui.components.inpainting_tab import InpaintingTab
 from src.ui.components.image_blend_tab import ImageBlendTab
 from src.ui.components.prompt_manager_tab import PromptManagerTab
+from src.ui.components.object_extraction_tab import ObjectExtractionTab
+from src.ui.components.transparency_tab import TransparencyTab
 from src.ui.handlers.event_handlers import EventHandlers
 
 
@@ -44,6 +46,8 @@ class FaceManagerApp:
         self.inpainting_tab = InpaintingTab(self.file_manager, self.inpaint_service)
         self.image_blend_tab = ImageBlendTab(self.image_blend_service, self.file_manager)
         self.prompt_manager_tab = PromptManagerTab(self.file_manager)
+        self.object_extraction_tab = ObjectExtractionTab(self.file_manager)
+        self.transparency_tab = TransparencyTab(self.file_manager)
         
         # 이벤트 핸들러 초기화
         self.event_handlers = EventHandlers(self.face_manager, self.file_manager)
@@ -85,8 +89,10 @@ class FaceManagerApp:
             tab_face_extraction = self.face_extraction_tab.create_interface()
             tab_embedding_list = self.embedding_list_tab.create_interface()
             tab_inpainting = self.inpainting_tab.create_interface()
-            tab_image_blend = self.image_blend_tab.create_interface()
             tab_prompt_manager = self.prompt_manager_tab.create_interface()
+            tab_image_blend = self.image_blend_tab.create_interface()
+            tab_object_extraction = self.object_extraction_tab.create_interface()
+            tab_transparency = self.transparency_tab.create_interface()
             
             # 탭 선택 이벤트 핸들러 설정
             tab_face_swap.select(
@@ -113,22 +119,36 @@ class FaceManagerApp:
                 outputs=[current_tab_info]
             )
             
-            tab_image_blend.select(
-                fn=lambda: self._log_tab_selection("Image Blend"),
-                inputs=[],
-                outputs=[current_tab_info]
-            )
-            
             tab_prompt_manager.select(
                 fn=lambda: self._log_tab_selection("Prompt Manager"),
                 inputs=[],
                 outputs=[current_tab_info]
             )
             
+            tab_image_blend.select(
+                fn=lambda: self._log_tab_selection("Image Blend"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
+            tab_object_extraction.select(
+                fn=lambda: self._log_tab_selection("Object Extraction"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
+            tab_transparency.select(
+                fn=lambda: self._log_tab_selection("Transparency"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
             # 독립적인 이벤트 핸들러 설정
             self.inpainting_tab.setup_event_handlers()
-            self.image_blend_tab.setup_event_handlers()
             self.prompt_manager_tab.setup_event_handlers()
+            self.image_blend_tab.setup_event_handlers()
+            self.object_extraction_tab.setup_event_handlers()
+            self.transparency_tab.setup_event_handlers()
             
             # 이벤트 핸들러 설정
             self.event_handlers.setup_all_handlers(
@@ -186,6 +206,8 @@ class FaceManagerApp:
                 "inpainting_tab": self.inpainting_tab is not None,
                 "image_blend_tab": self.image_blend_tab is not None,
                 "prompt_manager_tab": self.prompt_manager_tab is not None,
+                "object_extraction_tab": self.object_extraction_tab is not None,
+                "transparency_tab": self.transparency_tab is not None,
                 "event_handlers": self.event_handlers is not None
             }
         }

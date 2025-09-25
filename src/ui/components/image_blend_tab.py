@@ -12,6 +12,7 @@ from PIL import Image
 
 from src.services.image_blend_service import ImageBlendService
 from src.services.file_manager import FileManager
+from src.utils.file_utils import open_save_location, get_save_location_status
 
 
 class ImageBlendTab:
@@ -27,6 +28,7 @@ class ImageBlendTab:
         """
         self.image_blend_service = image_blend_service
         self.file_manager = file_manager
+        self.last_result_path = None  # 마지막 저장된 결과 파일 경로
     
     def create_interface(self) -> gr.Tab:
         """
@@ -110,7 +112,7 @@ class ImageBlendTab:
                             size="sm"
                         )
                         self.save_status_btn = gr.Button(
-                            "💾 저장 위치 확인",
+                            "📁 저장 위치 확인",
                             variant="secondary", 
                             size="sm"
                         )
@@ -242,17 +244,22 @@ class ImageBlendTab:
     
     def _show_save_location(self) -> str:
         """
-        저장 위치 정보를 반환합니다.
+        저장 위치를 파일 탐색기로 열고 상태 메시지를 반환합니다.
         
         Returns:
-            저장 위치 정보 메시지
+            실행 결과 메시지
         """
         try:
-            output_path = self.image_blend_service.config.get("image_blend_output_path", "./output/image_blend")
-            return f"💾 이미지 결합 결과 저장 위치:\n{output_path}\n\n파일명 형식: blend_result_YYYYMMDD_HHMMSS.jpg"
+            # 이미지 결합 결과 저장 경로 가져오기
+            output_path = self.image_blend_service.config.get(
+                "image_blend_output_path", 
+                "./output/image_blend"
+            )
+            
+            return open_save_location(output_path, self.last_result_path)
             
         except Exception as e:
-            return f"❌ 저장 위치 정보를 가져오는데 실패했습니다: {str(e)}"
+            return f"❌ 저장 위치 열기 중 오류가 발생했습니다: {str(e)}"
 
 
 if __name__ == "__main__":

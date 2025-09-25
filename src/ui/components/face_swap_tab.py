@@ -13,6 +13,8 @@ from typing import Tuple, Optional, Dict, Any
 
 from src.services.face_manager import FaceManager
 from src.services.file_manager import FileManager
+from src.utils.file_utils import open_save_location, get_save_location_status
+from src.utils import Config
 
 
 class FaceSwapTab:
@@ -28,6 +30,8 @@ class FaceSwapTab:
         """
         self.face_manager = face_manager
         self.file_manager = file_manager
+        self.config = Config()  # Config 인스턴스 추가
+        self.last_result_path = None  # 마지막 저장된 결과 파일 경로
     
     def create_interface(self) -> gr.Tab:
         """
@@ -177,6 +181,11 @@ class FaceSwapTab:
                         with gr.Row():
                             self.delete_result_btn = gr.Button(
                                 "🗑️ 결과 이미지 삭제",
+                                variant="secondary",
+                                size="sm"
+                            )
+                            self.save_location_btn = gr.Button(
+                                "📁 저장 위치 확인",
                                 variant="secondary",
                                 size="sm"
                             )
@@ -331,12 +340,33 @@ class FaceSwapTab:
             if final_image is not None:
                 try:
                     output_filename = self.file_manager.save_result_image(final_image)
+                    self.last_result_path = output_filename  # 마지막 저장 경로 기록
                     final_message += f"\n\n💾 최종 결과 저장: {output_filename}"
                     
                 except Exception as save_error:
                     final_message += f"\n⚠️ 이미지 저장 실패: {str(save_error)}"
             
             return final_image, final_message, final_image
+            
+        except Exception as e:
+            return None, f"❌ 얼굴 교체 중 오류가 발생했습니다: {str(e)}", None
+    
+    def show_save_location(self) -> str:
+        """
+        저장 위치를 파일 탐색기로 열고 상태 메시지를 반환합니다.
+        
+        Returns:
+            실행 결과 메시지
+        """
+        try:
+            # 얼굴 교체 결과 저장 경로 가져오기
+            # FileManager의 output_path 직접 사용
+            output_path = self.file_manager.output_path
+            
+            return open_save_location(output_path, self.last_result_path)
+            
+        except Exception as e:
+            return f"❌ 저장 위치 열기 중 오류가 발생했습니다: {str(e)}"
             
         except Exception as e:
             return None, f"얼굴 교체 실패: {str(e)}", None

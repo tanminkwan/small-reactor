@@ -14,6 +14,7 @@ from typing import Tuple, Optional, Dict, Any, List
 
 from src.services.file_manager import FileManager
 from src.services.inpaint_service import InpaintService
+from src.utils.file_utils import open_save_location, get_save_location_status
 
 
 class InpaintingTab:
@@ -35,6 +36,9 @@ class InpaintingTab:
         # Inpainting 기능 가용성 체크
         self.is_inpaint_available = inpaint_service.is_available()
         self.unavailable_reason = inpaint_service.get_unavailable_reason() if not self.is_inpaint_available else ""
+        
+        # 마지막 저장된 결과 파일 경로
+        self.last_result_path = None
     
     def create_interface(self) -> gr.Tab:
         """
@@ -228,6 +232,11 @@ class InpaintingTab:
                                 variant="secondary",
                                 size="sm"
                             )
+                            self.save_location_btn = gr.Button(
+                                "📁 저장 위치 확인",
+                                variant="secondary",
+                                size="sm"
+                            )
                     
                     # 상태 표시
                     initial_status = (
@@ -329,6 +338,13 @@ class InpaintingTab:
                 self.image_input,
                 self.save_status
             ]
+        )
+        
+        # 저장 위치 확인 버튼 클릭
+        self.save_location_btn.click(
+            fn=self._open_save_location,
+            inputs=[],
+            outputs=[self.save_status]
         )
     
     def _show_mask_result(
@@ -671,6 +687,7 @@ class InpaintingTab:
             
             # 자동으로 이미지 저장
             saved_path = self.inpaint_service.save_image(result_bgr)
+            self.last_result_path = saved_path  # 마지막 저장 경로 기록
             
             return (
                 result_pil,
@@ -717,7 +734,26 @@ class InpaintingTab:
                 return gr.update(), "❌ 이동할 결과 이미지가 없습니다."
             
             return gr.update(value=output_image), "✅ 결과 이미지가 편집 모드로 이동되었습니다. 새로운 마스킹을 진행해주세요."
-            
+
         except Exception as e:
             return gr.update(), f"❌ 편집 모드로 이동 중 오류가 발생했습니다: {str(e)}"
+    
+    def _open_save_location(self) -> str:
+        """
+        저장 위치를 파일 탐색기로 열고 상태 메시지를 반환합니다.
+        
+        Returns:
+            실행 결과 메시지
+        """
+        try:
+            # Inpainting 결과 저장 경로 가져오기
+            output_path = self.inpaint_service.config.get(
+                "inpaint_output_path", 
+                "./outputs/inpaint"
+            )
+            
+            return open_save_location(output_path, self.last_result_path)
+            
+        except Exception as e:
+            return f"❌ 저장 위치 열기 중 오류가 발생했습니다: {str(e)}"
     

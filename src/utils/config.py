@@ -55,6 +55,8 @@ class Config:
             "output_path": self._get_str("OUTPUT_PATH", "./output"),
             "inpaint_output_path": self._get_str("INPAINT_OUTPUT_PATH", "./output/inpaint"),
             "image_blend_output_path": self._get_str("IMAGE_BLEND_OUTPUT_PATH", "./output/image_blend"),
+            "object_extraction_output_path": self._get_str("OBJECT_EXTRACTION_OUTPUT_PATH", "./output/object_extraction"),
+            "faces_path": self._get_str("FACES_PATH", "./faces"),
             
             # SAM 모델 설정
             "sam_model_path": self._get_str("SAM_MODEL_PATH", "./sam_models"),

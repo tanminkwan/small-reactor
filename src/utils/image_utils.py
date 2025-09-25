@@ -254,7 +254,8 @@ def load_sam_model(
 
 def extract_object_with_sam(
     image: np.ndarray,
-    predictor
+    predictor,
+    click_point: Optional[tuple] = None
 ) -> Optional[Image.Image]:
     """
     SAM (Segment Anything Model)을 사용하여 객체를 추출합니다.
@@ -262,6 +263,7 @@ def extract_object_with_sam(
     Args:
         image: 입력 이미지 (BGR numpy array)
         predictor: 이미 로드된 SAM Predictor 객체
+        click_point: 사용자 클릭 좌표 (x, y). None이면 중앙점 사용
     
     Returns:
         추출된 이미지 (PIL Image) 또는 None (실패시)
@@ -286,9 +288,22 @@ def extract_object_with_sam(
         # SAM에 이미지 설정
         predictor.set_image(image_rgb)
         
-        # 중앙 점을 프롬프트로 사용 (객체가 중앙에 있다고 가정)
+        # 클릭 좌표 또는 중앙 점을 프롬프트로 사용
         h, w = image_rgb.shape[:2]
-        input_point = np.array([[w//2, h//2]])
+        
+        if click_point is not None:
+            # 사용자가 클릭한 좌표 사용
+            x, y = click_point
+            # 범위 검사 (이미지 범위 내로 제한)
+            x = max(0, min(w-1, x))
+            y = max(0, min(h-1, y))
+            input_point = np.array([[x, y]])
+            print(f"📍 SAM 프롬프트 사용: 클릭 좌표 ({x}, {y})")
+        else:
+            # 중앙 점을 프롬프트로 사용 (객체가 중앙에 있다고 가정)
+            input_point = np.array([[w//2, h//2]])
+            print(f"📍 SAM 프롬프트 사용: 중앙점 ({w//2}, {h//2})")
+        
         input_label = np.array([1])  # 전경
         
         # 분할 실행
