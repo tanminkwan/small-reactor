@@ -81,6 +81,17 @@ class FaceSwapTab:
                         info="체크하면 얼굴 교체 후 자동으로 CodeFormer 복원도 수행됩니다"
                     )
                     
+                    # CodeFormer Fidelity 설정 (조건부 표시)
+                    with gr.Group(visible=True) as self.codeformer_settings_group:
+                        self.fidelity_slider = gr.Slider(
+                            label="Fidelity (복원 강도)",
+                            minimum=0.0,
+                            maximum=1.0,
+                            value=0.5,
+                            step=0.1,
+                            info="높을수록 원본에 가깝게 복원됩니다 (0.0: 완전 복원, 1.0: 원본 유지)"
+                        )
+                    
                     # 입 원본유지 체크박스
                     self.preserve_mouth_checkbox = gr.Checkbox(
                         label="입 원본유지",
@@ -251,6 +262,7 @@ class FaceSwapTab:
         face_indices: str, 
         source_face_name: str, 
         use_codeformer: bool, 
+        fidelity: float = 0.5,
         preserve_mouth: bool = False, 
         mouth_settings: Optional[Dict[str, Any]] = None,
         mouth_preserve_method: str = "ellipse"
@@ -263,8 +275,10 @@ class FaceSwapTab:
             face_indices: 교체할 얼굴 인덱스
             source_face_name: 소스 얼굴 이름
             use_codeformer: CodeFormer 복원 사용 여부
+            fidelity: CodeFormer Fidelity 설정 (0.0-1.0)
             preserve_mouth: 입 원본유지 여부
             mouth_settings: 입 마스크 설정
+            mouth_preserve_method: 입 원본유지 방식
             
         Returns:
             (최종 이미지, 메시지, 최종 이미지)
@@ -304,7 +318,7 @@ class FaceSwapTab:
                     
                     # CodeFormer 복원 수행
                     cf_success, cf_message, enhanced_image_rgb = self.face_manager.enhance_faces_with_codeformer(
-                        swapped_image_bgr, face_indices
+                        swapped_image_bgr, face_indices, fidelity
                     )
                     
                     if cf_success:

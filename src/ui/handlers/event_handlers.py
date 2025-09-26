@@ -60,6 +60,13 @@ class EventHandlers:
             outputs=[gr.State(), tab.swap_result_text, tab.original_image, tab.face_indices_input, tab.preserve_mouth_checkbox, tab.mouth_preserve_method]
         )
         
+        # CodeFormer 복원 체크박스 변경 시 설정 그룹 표시/숨김
+        tab.codeformer_checkbox.change(
+            fn=self.ui_helpers.toggle_codeformer_settings,
+            inputs=[tab.codeformer_checkbox],
+            outputs=[tab.codeformer_settings_group]
+        )
+        
         # 입 원본유지 체크박스 변경 시 설정 그룹과 방식 선택 영역 표시/숨김
         tab.preserve_mouth_checkbox.change(
             fn=lambda checked, method: (
@@ -85,6 +92,7 @@ class EventHandlers:
                 tab.face_indices_input, 
                 tab.source_face_dropdown, 
                 tab.codeformer_checkbox, 
+                tab.fidelity_slider,
                 tab.preserve_mouth_checkbox, 
                 tab.mouth_preserve_method,
                 tab.expand_ratio_slider, 
@@ -169,6 +177,7 @@ class EventHandlers:
         face_indices: str, 
         source_face_name: str, 
         use_codeformer: bool, 
+        fidelity: float,
         preserve_mouth: bool, 
         mouth_preserve_method: str,
         expand_ratio: float, 
@@ -185,7 +194,9 @@ class EventHandlers:
             face_indices: 얼굴 인덱스
             source_face_name: 소스 얼굴 이름
             use_codeformer: CodeFormer 사용 여부
+            fidelity: CodeFormer Fidelity 설정 (0.0-1.0)
             preserve_mouth: 입 원본유지 여부
+            mouth_preserve_method: 입 원본유지 방식
             expand_ratio: 확장 비율
             scale_x: 가로 스케일
             scale_y: 세로 스케일
@@ -209,7 +220,7 @@ class EventHandlers:
         # FaceSwapTab 인스턴스 생성하여 메서드 호출
         face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
         final_image, message, result_image = face_swap_tab.perform_face_swap_with_optional_codeformer(
-            file_path, face_indices, source_face_name, use_codeformer, preserve_mouth, mouth_settings, mouth_preserve_method
+            file_path, face_indices, source_face_name, use_codeformer, fidelity, preserve_mouth, mouth_settings, mouth_preserve_method
         )
         return final_image, message, result_image
     

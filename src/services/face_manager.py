@@ -284,13 +284,14 @@ class FaceManager:
             self._logger.error(f"얼굴 교체 실패: {e}")
             return False, f"얼굴 교체 실패: {str(e)}", None
     
-    def enhance_faces_with_codeformer(self, image: np.ndarray, face_indices: str = "") -> Tuple[bool, str, np.ndarray]:
+    def enhance_faces_with_codeformer(self, image: np.ndarray, face_indices: str = "", fidelity: float = 0.5) -> Tuple[bool, str, np.ndarray]:
         """
         CodeFormer를 사용하여 얼굴 영역을 복원합니다.
         
         Args:
             image: 입력 이미지 (BGR)
             face_indices: 복원할 얼굴 인덱스 (쉼표로 구분, 비워두면 모든 얼굴)
+            fidelity: CodeFormer Fidelity 설정 (0.0-1.0)
             
         Returns:
             (성공여부, 메시지, 복원된 이미지)
@@ -330,7 +331,7 @@ class FaceManager:
             enhanced_image = self.enhancer.enhance_face_regions(
                 image, 
                 face_regions, 
-                enhancement_strength=0.5
+                enhancement_strength=fidelity
             )
             
             # BGR을 RGB로 변환

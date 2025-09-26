@@ -113,5 +113,18 @@ class UIHelpers:
             라디오 버튼 표시/숨김 설정
         """
         return gr.update(visible=checked)
+    
+    @staticmethod
+    def toggle_codeformer_settings(checked: bool) -> gr.Group:
+        """
+        CodeFormer 복원 체크박스 상태에 따라 설정 그룹 표시/숨김
+        
+        Args:
+            checked: 체크박스 상태
+            
+        Returns:
+            그룹 표시/숨김 설정
+        """
+        return gr.update(visible=checked)
 
 
