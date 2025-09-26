@@ -112,13 +112,18 @@ class FileManager:
         드롭다운용 embedding 선택지 목록을 반환합니다.
         
         Returns:
-            embedding 이름 리스트
+            embedding 이름 리스트 ("선택 안함" 옵션 포함)
         """
+        choices = ["선택 안함"]  # 기본 옵션으로 "선택 안함" 추가
+        
         if not self.faces_dir.exists():
-            return []
+            return choices
         
         json_files = list(self.faces_dir.glob("*.json"))
-        return [f.stem for f in json_files]  # .json 확장자 제거
+        face_choices = [f.stem for f in json_files]  # .json 확장자 제거
+        choices.extend(face_choices)
+        
+        return choices
     
     def get_embedding_gallery_data(self) -> List[Tuple[str, str]]:
         """

@@ -286,8 +286,11 @@ class FaceSwapTab:
         if file_path is None:
             return None, "타겟 이미지를 업로드해주세요.", None
         
-        if not source_face_name:
-            return None, "바꿀 얼굴을 선택해주세요.", None
+        # "선택 안함"인 경우와 CodeFormer 사용 안함인 경우 검증
+        is_no_face_selected = not source_face_name or source_face_name == "선택 안함"
+        
+        if is_no_face_selected and not use_codeformer:
+            return None, "바꿀 얼굴을 선택하거나 CodeFormer 복원을 체크해주세요.", None
         
         try:
             from PIL import Image
@@ -296,39 +299,45 @@ class FaceSwapTab:
             pil_image = Image.open(file_path)
             image_rgb = np.array(pil_image)
             
-            # RGB를 BGR로 변환 (얼굴 교체용)
+            # RGB를 BGR로 변환
             image_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
             
-            # 얼굴 교체 수행
-            success, message, swapped_image_rgb = self.face_manager.swap_faces(
-                image_bgr, face_indices, source_face_name, self.file_manager.faces_dir
-            )
-            
-            if not success:
-                return None, message, None
-            
-            final_image = swapped_image_rgb
-            final_message = message
+            # "선택 안함"이 아닌 경우에만 얼굴 교체 수행
+            if not is_no_face_selected:
+                # 얼굴 교체 수행
+                success, message, swapped_image_rgb = self.face_manager.swap_faces(
+                    image_bgr, face_indices, source_face_name, self.file_manager.faces_dir
+                )
+                
+                if not success:
+                    return None, message, None
+                
+                final_image = swapped_image_rgb
+                final_message = message
+            else:
+                # "선택 안함"인 경우 원본 이미지 사용
+                final_image = image_rgb
+                final_message = "얼굴 교체 건너뛰기 (CodeFormer 복원만 수행)"
             
             # CodeFormer 복원이 체크되어 있으면 수행
             if use_codeformer:
                 try:
-                    # 얼굴 교체된 이미지를 BGR로 변환 (CodeFormer용)
-                    swapped_image_bgr = cv2.cvtColor(swapped_image_rgb, cv2.COLOR_RGB2BGR)
+                    # 현재 이미지를 BGR로 변환 (CodeFormer용)
+                    current_image_bgr = cv2.cvtColor(final_image, cv2.COLOR_RGB2BGR)
                     
                     # CodeFormer 복원 수행
                     cf_success, cf_message, enhanced_image_rgb = self.face_manager.enhance_faces_with_codeformer(
-                        swapped_image_bgr, face_indices, fidelity
+                        current_image_bgr, face_indices, fidelity
                     )
                     
                     if cf_success:
                         final_image = enhanced_image_rgb
-                        final_message = f"{message}\n{cf_message}"
+                        final_message = f"{final_message}\n{cf_message}"
                     else:
-                        final_message = f"{message}\nCodeFormer 복원 실패: {cf_message}"
+                        final_message = f"{final_message}\nCodeFormer 복원 실패: {cf_message}"
                         
                 except Exception as e:
-                    final_message = f"{message}\nCodeFormer 복원 실패: {str(e)}"
+                    final_message = f"{final_message}\nCodeFormer 복원 실패: {str(e)}"
             
             # 입 원본유지가 체크되어 있으면 CodeFormer 복원 후에 수행
             if preserve_mouth and mouth_settings:
