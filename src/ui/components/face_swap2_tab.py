@@ -8,6 +8,7 @@ Open/Closed Principle (OCP)에 따라
 
 import gradio as gr
 import numpy as np
+from pathlib import Path
 from typing import Tuple, Optional
 
 from src.ui.components.face_swap_tab import FaceSwapTab
@@ -42,3 +43,14 @@ class FaceSwap2Tab(FaceSwapTab):
             self.file_manager.faces_dir,
             model_name=swap_options.get("model_name")
         )
+
+    def _get_result_prefix(self, is_no_face_selected: bool, **swap_options) -> str:
+        """결과 파일명 접두사를 반환합니다. (예: hyperswap_1a_256 -> final_hyperswap1a)"""
+        if is_no_face_selected:
+            return "final_codeformer"
+        model_name = swap_options.get("model_name") or Path(
+            self.face_manager.config.get_model_path("hyperswap")
+        ).stem
+        parts = model_name.split("_")
+        short_name = "".join(parts[:2]) if len(parts) >= 2 else model_name
+        return f"final_{short_name}"

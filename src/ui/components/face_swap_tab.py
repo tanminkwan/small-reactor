@@ -247,6 +247,15 @@ class FaceSwapTab:
             image_bgr, face_indices, source_face_name, self.file_manager.faces_dir
         )
     
+    def _get_result_prefix(self, is_no_face_selected: bool, **swap_options) -> str:
+        """
+        결과 파일명 접두사를 반환합니다. (예: final_inswapper)
+        얼굴 교체 없이 CodeFormer만 수행한 경우 final_codeformer
+        """
+        if is_no_face_selected:
+            return "final_codeformer"
+        return "final_inswapper"
+    
     def process_target_image(self, file_path: str, current_indices: str = "") -> Tuple[bool, str, Optional[np.ndarray], str, bool, str]:
         """
         타겟 이미지를 처리하고 얼굴 탐지 결과를 박스로 표시합니다.
@@ -394,7 +403,8 @@ class FaceSwapTab:
             # 최종 결과 이미지 파일로 저장
             if final_image is not None:
                 try:
-                    output_filename = self.file_manager.save_result_image(final_image)
+                    result_prefix = self._get_result_prefix(is_no_face_selected, **swap_options)
+                    output_filename = self.file_manager.save_result_image(final_image, prefix=result_prefix)
                     self.last_result_path = output_filename  # 마지막 저장 경로 기록
                     final_message += f"\n\n💾 최종 결과 저장: {output_filename}"
                     

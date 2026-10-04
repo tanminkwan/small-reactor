@@ -192,8 +192,8 @@ class FileManager:
             if not output_dir.exists():
                 return False, "출력 폴더가 존재하지 않습니다."
             
-            # 가장 최근 생성된 final_result 파일 찾기
-            result_files = list(output_dir.glob("final_result_*.jpg"))
+            # 가장 최근 생성된 결과 파일 찾기 (final_<모델명>_*, 이전 형식 final_result_* 포함)
+            result_files = list(output_dir.glob("final_*.jpg"))
             if not result_files:
                 return False, "삭제할 결과 파일이 없습니다."
             
@@ -223,8 +223,8 @@ class FileManager:
             if not output_dir.exists():
                 return False, "출력 폴더가 존재하지 않습니다.", None
             
-            # 가장 최근 생성된 final_result 파일 찾기
-            result_files = list(output_dir.glob("final_result_*.jpg"))
+            # 가장 최근 생성된 결과 파일 찾기 (final_<모델명>_*, 이전 형식 final_result_* 포함)
+            result_files = list(output_dir.glob("final_*.jpg"))
             if not result_files:
                 return False, "표시할 결과 파일이 없습니다.", None
             
