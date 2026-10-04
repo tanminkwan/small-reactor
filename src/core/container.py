@@ -13,6 +13,7 @@ from src.services.face_manager import FaceManager
 from src.services.file_manager import FileManager
 from src.services.inpaint_service import InpaintService
 from src.services.image_blend_service import ImageBlendService
+from src.services.webp_service import WebPService
 from src.utils.config import Config
 
 
@@ -36,6 +37,7 @@ class DIContainer:
         self._file_manager = None
         self._inpaint_service = None
         self._image_blend_service = None
+        self._webp_service = None
         
         # 서비스 초기화
         self._initialize_services()
@@ -66,6 +68,10 @@ class DIContainer:
             # ImageBlendService 초기화
             self._image_blend_service = ImageBlendService(self._config)
             self._logger.info("ImageBlendService 초기화 완료")
+            
+            # WebPService 초기화
+            self._webp_service = WebPService()
+            self._logger.info("WebPService 초기화 완료")
             
         except Exception as e:
             self._logger.error(f"서비스 초기화 실패: {e}")
@@ -126,6 +132,17 @@ class DIContainer:
             raise RuntimeError("ImageBlendService가 초기화되지 않았습니다.")
         return self._image_blend_service
     
+    def get_webp_service(self) -> WebPService:
+        """
+        WebPService 인스턴스를 반환합니다.
+        
+        Returns:
+            WebPService 인스턴스
+        """
+        if self._webp_service is None:
+            raise RuntimeError("WebPService가 초기화되지 않았습니다.")
+        return self._webp_service
+    
     def is_initialized(self) -> bool:
         """
         모든 서비스가 초기화되었는지 확인합니다.
@@ -138,7 +155,8 @@ class DIContainer:
             self._face_manager is not None and
             self._file_manager is not None and
             self._inpaint_service is not None and
-            self._image_blend_service is not None
+            self._image_blend_service is not None and
+            self._webp_service is not None
         )
     
     def get_service_info(self) -> dict:
@@ -154,6 +172,7 @@ class DIContainer:
             "file_manager_initialized": self._file_manager is not None,
             "inpaint_service_initialized": self._inpaint_service is not None,
             "image_blend_service_initialized": self._image_blend_service is not None,
+            "webp_service_initialized": self._webp_service is not None,
             "all_services_initialized": self.is_initialized()
         }
 

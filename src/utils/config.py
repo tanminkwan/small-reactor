@@ -56,6 +56,9 @@ class Config:
             "inpaint_output_path": self._get_str("INPAINT_OUTPUT_PATH", "./output/inpaint"),
             "image_blend_output_path": self._get_str("IMAGE_BLEND_OUTPUT_PATH", "./output/image_blend"),
             "object_extraction_output_path": self._get_str("OBJECT_EXTRACTION_OUTPUT_PATH", "./output/object_extraction"),
+            "webp_extract_output_path": self._get_str("WEBP_EXTRACT_OUTPUT_PATH", "./outputs/webp_frames/extracted"),
+            "webp_swap_output_path": self._get_str("WEBP_SWAP_OUTPUT_PATH", "./outputs/webp_frames/swapped"),
+            "webp_animated_output_path": self._get_str("WEBP_ANIMATED_OUTPUT_PATH", "./outputs/animated_swapped.webp"),
             "faces_path": self._get_str("FACES_PATH", "./faces"),
             
             # SAM 모델 설정

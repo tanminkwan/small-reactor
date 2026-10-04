@@ -7,6 +7,7 @@ Single Responsibility Principle (SRP)에 따라
 
 import gradio as gr
 import logging
+from pathlib import Path
 
 from src.core.container import DIContainer
 from src.ui.components.face_extraction_tab import FaceExtractionTab
@@ -17,6 +18,7 @@ from src.ui.components.image_blend_tab import ImageBlendTab
 from src.ui.components.prompt_manager_tab import PromptManagerTab
 from src.ui.components.object_extraction_tab import ObjectExtractionTab
 from src.ui.components.transparency_tab import TransparencyTab
+from src.ui.components.animated_webp_tab import AnimatedWebPTab
 from src.ui.handlers.event_handlers import EventHandlers
 
 
@@ -38,6 +40,7 @@ class FaceManagerApp:
         self.file_manager = container.get_file_manager()
         self.inpaint_service = container.get_inpaint_service()
         self.image_blend_service = container.get_image_blend_service()
+        self.webp_service = container.get_webp_service()
         
         # 탭 컴포넌트들 초기화
         self.face_extraction_tab = FaceExtractionTab(self.face_manager)
@@ -48,6 +51,7 @@ class FaceManagerApp:
         self.prompt_manager_tab = PromptManagerTab(self.file_manager)
         self.object_extraction_tab = ObjectExtractionTab(self.file_manager)
         self.transparency_tab = TransparencyTab(self.file_manager)
+        self.animated_webp_tab = AnimatedWebPTab(self.webp_service, self.face_manager, self.file_manager, container.get_config())
         
         # 이벤트 핸들러 초기화
         self.event_handlers = EventHandlers(self.face_manager, self.file_manager)
@@ -86,6 +90,7 @@ class FaceManagerApp:
             
             # 각 탭 생성 및 객체 저장
             tab_face_swap = self.face_swap_tab.create_interface()
+            tab_animated_webp = self.animated_webp_tab.create_interface()
             tab_face_extraction = self.face_extraction_tab.create_interface()
             tab_embedding_list = self.embedding_list_tab.create_interface()
             tab_inpainting = self.inpainting_tab.create_interface()
@@ -97,6 +102,12 @@ class FaceManagerApp:
             # 탭 선택 이벤트 핸들러 설정
             tab_face_swap.select(
                 fn=lambda: self._log_tab_selection("Face Swap"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
+            tab_animated_webp.select(
+                fn=lambda: self._log_tab_selection("Animated WebP"),
                 inputs=[],
                 outputs=[current_tab_info]
             )
@@ -149,6 +160,7 @@ class FaceManagerApp:
             self.image_blend_tab.setup_event_handlers()
             self.object_extraction_tab.setup_event_handlers()
             self.transparency_tab.setup_event_handlers()
+            self.animated_webp_tab.setup_event_handlers()
             
             # 이벤트 핸들러 설정
             self.event_handlers.setup_all_handlers(
@@ -176,12 +188,25 @@ class FaceManagerApp:
             # 인터페이스 생성
             interface = self.create_interface()
             
+            # 허용할 외부 경로 설정
+            config = self.container.get_config()
+            allowed_paths = []
+            for path_key in [
+                "output_path", "inpaint_output_path", "image_blend_output_path",
+                "object_extraction_output_path", "webp_extract_output_path",
+                "webp_swap_output_path", "webp_animated_output_path", "faces_path"
+            ]:
+                val = config.get(path_key)
+                if val:
+                    allowed_paths.append(str(Path(val).resolve()))
+            
             # 애플리케이션 실행
             interface.launch(
                 server_name=server_name,
                 server_port=server_port,
                 share=share,
-                debug=debug
+                debug=debug,
+                allowed_paths=allowed_paths
             )
             
         except Exception as e:
@@ -202,6 +227,7 @@ class FaceManagerApp:
             "components_initialized": {
                 "face_extraction_tab": self.face_extraction_tab is not None,
                 "face_swap_tab": self.face_swap_tab is not None,
+                "animated_webp_tab": self.animated_webp_tab is not None,
                 "embedding_list_tab": self.embedding_list_tab is not None,
                 "inpainting_tab": self.inpainting_tab is not None,
                 "image_blend_tab": self.image_blend_tab is not None,
