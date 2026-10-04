@@ -12,6 +12,7 @@ from pathlib import Path
 from src.core.container import DIContainer
 from src.ui.components.face_extraction_tab import FaceExtractionTab
 from src.ui.components.face_swap_tab import FaceSwapTab
+from src.ui.components.face_swap2_tab import FaceSwap2Tab
 from src.ui.components.embedding_list_tab import EmbeddingListTab
 from src.ui.components.inpainting_tab import InpaintingTab
 from src.ui.components.image_blend_tab import ImageBlendTab
@@ -45,6 +46,7 @@ class FaceManagerApp:
         # 탭 컴포넌트들 초기화
         self.face_extraction_tab = FaceExtractionTab(self.face_manager)
         self.face_swap_tab = FaceSwapTab(self.face_manager, self.file_manager)
+        self.face_swap2_tab = FaceSwap2Tab(self.face_manager, self.file_manager)
         self.embedding_list_tab = EmbeddingListTab(self.file_manager)
         self.inpainting_tab = InpaintingTab(self.file_manager, self.inpaint_service)
         self.image_blend_tab = ImageBlendTab(self.image_blend_service, self.file_manager)
@@ -90,6 +92,7 @@ class FaceManagerApp:
             
             # 각 탭 생성 및 객체 저장
             tab_face_swap = self.face_swap_tab.create_interface()
+            tab_face_swap2 = self.face_swap2_tab.create_interface()
             tab_animated_webp = self.animated_webp_tab.create_interface()
             tab_face_extraction = self.face_extraction_tab.create_interface()
             tab_embedding_list = self.embedding_list_tab.create_interface()
@@ -102,6 +105,12 @@ class FaceManagerApp:
             # 탭 선택 이벤트 핸들러 설정
             tab_face_swap.select(
                 fn=lambda: self._log_tab_selection("Face Swap"),
+                inputs=[],
+                outputs=[current_tab_info]
+            )
+            
+            tab_face_swap2.select(
+                fn=lambda: self._log_tab_selection("Face Swap 2 (HyperSwap)"),
                 inputs=[],
                 outputs=[current_tab_info]
             )
@@ -166,7 +175,8 @@ class FaceManagerApp:
             self.event_handlers.setup_all_handlers(
                 self.face_extraction_tab,
                 self.face_swap_tab,
-                self.embedding_list_tab
+                self.embedding_list_tab,
+                self.face_swap2_tab
             )
         
         self._logger.info("인터페이스 생성 완료")
@@ -227,6 +237,7 @@ class FaceManagerApp:
             "components_initialized": {
                 "face_extraction_tab": self.face_extraction_tab is not None,
                 "face_swap_tab": self.face_swap_tab is not None,
+                "face_swap2_tab": self.face_swap2_tab is not None,
                 "animated_webp_tab": self.animated_webp_tab is not None,
                 "embedding_list_tab": self.embedding_list_tab is not None,
                 "inpainting_tab": self.inpainting_tab is not None,

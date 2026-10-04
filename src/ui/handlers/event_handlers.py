@@ -85,8 +85,15 @@ class EventHandlers:
         )
         
         # 얼굴 교체 버튼 클릭 시 처리 (CodeFormer 포함)
+        # 탭에 추가 입력(예: HyperSwap 모델 선택)이 있으면 해당 탭의 교체 로직을 사용
+        extra_swap_inputs = tab.get_extra_swap_inputs()
+        if extra_swap_inputs:
+            swap_fn = self._make_tab_swap_wrapper(tab, [name for name, _ in extra_swap_inputs])
+        else:
+            swap_fn = self._perform_face_swap_wrapper
+        
         tab.swap_btn.click(
-            fn=self._perform_face_swap_wrapper,
+            fn=swap_fn,
             inputs=[
                 tab.target_upload, 
                 tab.face_indices_input, 
@@ -100,7 +107,7 @@ class EventHandlers:
                 tab.scale_y_slider, 
                 tab.offset_x_slider, 
                 tab.offset_y_slider
-            ],
+            ] + [component for _, component in extra_swap_inputs],
             outputs=[tab.swapped_image_state, tab.swap_result_text, tab.swapped_image]
         )
         
@@ -157,7 +164,8 @@ class EventHandlers:
         self, 
         face_extraction_tab: FaceExtractionTab,
         face_swap_tab: FaceSwapTab,
-        embedding_list_tab: EmbeddingListTab
+        embedding_list_tab: EmbeddingListTab,
+        face_swap2_tab: Optional[FaceSwapTab] = None
     ) -> None:
         """
         모든 탭의 이벤트 핸들러를 설정합니다.
@@ -166,10 +174,43 @@ class EventHandlers:
             face_extraction_tab: 얼굴 추출 탭
             face_swap_tab: 얼굴 교체 탭
             embedding_list_tab: Embedding 목록 탭
+            face_swap2_tab: 얼굴 교체 2 탭 (HyperSwap, 선택)
         """
         self.setup_face_extraction_handlers(face_extraction_tab)
         self.setup_face_swap_handlers(face_swap_tab)
+        if face_swap2_tab is not None:
+            self.setup_face_swap_handlers(face_swap2_tab)
         self.setup_embedding_list_handlers(embedding_list_tab)
+    
+    def _make_tab_swap_wrapper(self, tab: FaceSwapTab, extra_option_names: list):
+        """
+        추가 옵션을 가진 탭용 얼굴 교체 래퍼를 생성합니다.
+        
+        Args:
+            tab: 얼굴 교체 탭 (해당 탭의 _swap_faces 사용)
+            extra_option_names: 기본 입력 뒤에 추가되는 옵션 이름 목록
+        """
+        def wrapper(
+            file_path, face_indices, source_face_name, use_codeformer, fidelity,
+            preserve_mouth, mouth_preserve_method,
+            expand_ratio, scale_x, scale_y, offset_x, offset_y,
+            *extra_values
+        ):
+            mouth_settings = None
+            if preserve_mouth:
+                mouth_settings = {
+                    'expand_ratio': expand_ratio,
+                    'scale_x': scale_x,
+                    'scale_y': scale_y,
+                    'offset_x': offset_x,
+                    'offset_y': offset_y
+                }
+            swap_options = dict(zip(extra_option_names, extra_values))
+            return tab.perform_face_swap_with_optional_codeformer(
+                file_path, face_indices, source_face_name, use_codeformer, fidelity,
+                preserve_mouth, mouth_settings, mouth_preserve_method, **swap_options
+            )
+        return wrapper
     
     def _perform_face_swap_wrapper(
         self, 

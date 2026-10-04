@@ -32,6 +32,9 @@ class FaceManager:
         self.detector = BuffaloDetector(config)
         self.enhancer = CodeFormerEnhancer(config)
         
+        # HyperSwap 모델은 최초 사용 시 로드하여 모델별로 캐시
+        self._hyperswap_swappers = {}
+        
         self._logger = logging.getLogger(__name__)
     
     def draw_face_boxes(self, image: np.ndarray, faces: List) -> np.ndarray:
@@ -205,48 +208,11 @@ class FaceManager:
             (성공여부, 메시지, 교체된 이미지)
         """
         try:
-            # source_face_name이 None이거나 빈 문자열인 경우 첫 번째 저장된 얼굴 사용
-            if not source_face_name or source_face_name.strip() == "":
-                # faces 디렉토리에서 첫 번째 .json 파일 찾기
-                json_files = list(faces_dir.glob("*.json"))
-                if not json_files:
-                    return False, "저장된 얼굴이 없습니다. 먼저 얼굴을 추출해주세요.", None
-                source_face_name = json_files[0].stem  # .json 확장자 제거
-            
-            # 소스 얼굴 embedding 로드
-            source_embedding_path = faces_dir / f"{source_face_name}.json"
-            if not source_embedding_path.exists():
-                return False, f"소스 얼굴 파일을 찾을 수 없습니다: {source_face_name}", None
-            
-            with open(source_embedding_path, 'r') as f:
-                source_embedding = np.array(json.load(f))
-            
-            # 타겟 이미지에서 얼굴 탐지
-            target_faces = self.detector.detect_faces(target_image)
-            if not target_faces:
-                return False, "타겟 이미지에서 얼굴을 찾을 수 없습니다.", None
-            
-            # 얼굴 인덱스와 위치 정보 로그 출력
-            self._logger.info(f"탐지된 얼굴 수: {len(target_faces)}")
-            for i, face in enumerate(target_faces):
-                bbox = face.bbox
-                x1, y1, x2, y2 = bbox
-                center_x = (x1 + x2) / 2
-                center_y = (y1 + y2) / 2
-                self._logger.info(f"얼굴 {i+1}: 중심점 ({center_x:.1f}, {center_y:.1f}), bbox ({x1:.1f}, {y1:.1f}, {x2:.1f}, {y2:.1f})")
-            
-            # 교체할 얼굴 인덱스 파싱
-            if face_indices.strip():
-                try:
-                    indices = [int(x.strip()) - 1 for x in face_indices.split(',')]  # 1-based to 0-based
-                    indices = [i for i in indices if 0 <= i < len(target_faces)]
-                    if not indices:
-                        return False, "유효한 얼굴 인덱스가 없습니다.", None
-                except ValueError:
-                    return False, "얼굴 인덱스 형식이 올바르지 않습니다.", None
-            else:
-                # 모든 얼굴 교체
-                indices = list(range(len(target_faces)))
+            error, source_embedding, source_face_name, target_faces, indices = self._prepare_swap_inputs(
+                target_image, face_indices, source_face_name, faces_dir
+            )
+            if error:
+                return False, error, None
             
             # 얼굴 교체 수행 (성공했던 방식 사용)
             from insightface import model_zoo
@@ -282,6 +248,142 @@ class FaceManager:
             
         except Exception as e:
             self._logger.error(f"얼굴 교체 실패: {e}")
+            return False, f"얼굴 교체 실패: {str(e)}", None
+    
+    def _prepare_swap_inputs(self, target_image: np.ndarray, face_indices: str, source_face_name: str, faces_dir: Path) -> Tuple[Optional[str], Optional[np.ndarray], str, List, List[int]]:
+        """
+        얼굴 교체에 필요한 입력(소스 임베딩, 타겟 얼굴, 교체 인덱스)을 준비합니다.
+        
+        Args:
+            target_image: 타겟 이미지 (BGR)
+            face_indices: 교체할 얼굴 인덱스 (쉼표로 구분, 비워두면 모든 얼굴)
+            source_face_name: 소스 얼굴 이름
+            faces_dir: 얼굴 파일들이 저장된 디렉토리
+            
+        Returns:
+            (오류 메시지 또는 None, 소스 임베딩, 소스 얼굴 이름, 타겟 얼굴 리스트, 0-based 인덱스 리스트)
+        """
+        # source_face_name이 None이거나 빈 문자열인 경우 첫 번째 저장된 얼굴 사용
+        if not source_face_name or source_face_name.strip() == "":
+            # faces 디렉토리에서 첫 번째 .json 파일 찾기
+            json_files = list(faces_dir.glob("*.json"))
+            if not json_files:
+                return "저장된 얼굴이 없습니다. 먼저 얼굴을 추출해주세요.", None, "", [], []
+            source_face_name = json_files[0].stem  # .json 확장자 제거
+        
+        # 소스 얼굴 embedding 로드
+        source_embedding_path = faces_dir / f"{source_face_name}.json"
+        if not source_embedding_path.exists():
+            return f"소스 얼굴 파일을 찾을 수 없습니다: {source_face_name}", None, source_face_name, [], []
+        
+        with open(source_embedding_path, 'r') as f:
+            source_embedding = np.array(json.load(f))
+        
+        # 타겟 이미지에서 얼굴 탐지
+        target_faces = self.detector.detect_faces(target_image)
+        if not target_faces:
+            return "타겟 이미지에서 얼굴을 찾을 수 없습니다.", None, source_face_name, [], []
+        
+        # 얼굴 인덱스와 위치 정보 로그 출력
+        self._logger.info(f"탐지된 얼굴 수: {len(target_faces)}")
+        for i, face in enumerate(target_faces):
+            bbox = face.bbox
+            x1, y1, x2, y2 = bbox
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+            self._logger.info(f"얼굴 {i+1}: 중심점 ({center_x:.1f}, {center_y:.1f}), bbox ({x1:.1f}, {y1:.1f}, {x2:.1f}, {y2:.1f})")
+        
+        # 교체할 얼굴 인덱스 파싱
+        if face_indices.strip():
+            try:
+                indices = [int(x.strip()) - 1 for x in face_indices.split(',')]  # 1-based to 0-based
+                indices = [i for i in indices if 0 <= i < len(target_faces)]
+                if not indices:
+                    return "유효한 얼굴 인덱스가 없습니다.", None, source_face_name, [], []
+            except ValueError:
+                return "얼굴 인덱스 형식이 올바르지 않습니다.", None, source_face_name, [], []
+        else:
+            # 모든 얼굴 교체
+            indices = list(range(len(target_faces)))
+        
+        return None, source_embedding, source_face_name, target_faces, indices
+    
+    def get_hyperswap_model_choices(self) -> List[str]:
+        """
+        사용 가능한 HyperSwap 모델 이름 목록을 반환합니다.
+        (HYPERSWAP_MODEL_PATH 와 같은 폴더의 hyperswap*.onnx 파일)
+        
+        Returns:
+            모델 이름 리스트 (기본 모델이 첫 번째)
+        """
+        default_path = Path(self.config.get_model_path("hyperswap"))
+        names = sorted(p.stem for p in default_path.parent.glob("hyperswap*.onnx"))
+        if default_path.stem in names:
+            names.remove(default_path.stem)
+            names.insert(0, default_path.stem)
+        return names
+    
+    def _get_hyperswap_swapper(self, model_name: Optional[str] = None):
+        """
+        HyperSwap 스왑퍼를 반환합니다 (최초 호출 시 로드 후 캐시).
+        
+        Args:
+            model_name: 모델 이름 (예: hyperswap_1c_256). None이면 기본 모델
+        """
+        from src.services.hyperswap_swapper import HyperSwapSwapper
+        
+        default_path = Path(self.config.get_model_path("hyperswap"))
+        model_path = default_path.parent / f"{model_name}.onnx" if model_name else default_path
+        key = str(model_path)
+        
+        if key not in self._hyperswap_swappers:
+            self._logger.info(f"HyperSwap 모델 로드: {model_path.name}")
+            self._hyperswap_swappers[key] = HyperSwapSwapper(self.config, model_path=key)
+        return self._hyperswap_swappers[key]
+    
+    def swap_faces_hyperswap(self, target_image: np.ndarray, face_indices: str, source_face_name: str, faces_dir: Path, model_name: Optional[str] = None) -> Tuple[bool, str, np.ndarray]:
+        """
+        HyperSwap 모델로 타겟 이미지의 얼굴들을 소스 얼굴로 교체합니다.
+        
+        Args:
+            target_image: 타겟 이미지 (BGR)
+            face_indices: 교체할 얼굴 인덱스 (쉼표로 구분, 비워두면 모든 얼굴)
+            source_face_name: 소스 얼굴 이름
+            faces_dir: 얼굴 파일들이 저장된 디렉토리
+            model_name: HyperSwap 모델 이름 (None이면 기본 모델)
+            
+        Returns:
+            (성공여부, 메시지, 교체된 이미지(RGB))
+        """
+        try:
+            error, source_embedding, source_face_name, target_faces, indices = self._prepare_swap_inputs(
+                target_image, face_indices, source_face_name, faces_dir
+            )
+            if error:
+                return False, error, None
+            
+            swapper = self._get_hyperswap_swapper(model_name)
+            
+            result_image = target_image.copy()
+            swapped_count = 0
+            for i in indices:
+                try:
+                    result_image = swapper.swap_face_with_embedding(result_image, target_faces[i], source_embedding)
+                    swapped_count += 1
+                except Exception as e:
+                    self._logger.error(f"HyperSwap 얼굴 {i+1} 교체 실패: {e}")
+                    continue
+            
+            # BGR을 RGB로 변환
+            result_image_rgb = cv2.cvtColor(result_image, cv2.COLOR_BGR2RGB)
+            
+            used_model = model_name or Path(self.config.get_model_path("hyperswap")).stem
+            message = f"얼굴 교체 완료! (HyperSwap: {used_model})\n교체된 얼굴: {swapped_count}개\n소스 얼굴: {source_face_name}"
+            
+            return True, message, result_image_rgb
+            
+        except Exception as e:
+            self._logger.error(f"HyperSwap 얼굴 교체 실패: {e}")
             return False, f"얼굴 교체 실패: {str(e)}", None
     
     def enhance_faces_with_codeformer(self, image: np.ndarray, face_indices: str = "", fidelity: float = 0.5) -> Tuple[bool, str, np.ndarray]:

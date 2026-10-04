@@ -35,6 +35,7 @@ class Config:
             # 모델 경로 설정
             "buffalo_l_model_path": self._get_str("BUFFALO_L_MODEL_PATH", "models/buffalo_l"),
             "inswapper_model_path": self._get_str("INSWAPPER_MODEL_PATH", "models/inswapper_128.onnx"),
+            "hyperswap_model_path": self._get_str("HYPERSWAP_MODEL_PATH", "models/hyperswap_1a_256.onnx"),
             "codeformer_model_path": self._get_str("CODEFORMER_MODEL_PATH", "models/codeformer-v0.1.0.pth"),
             "inpaint_model_path": self._get_str("INPAINT_MODEL_PATH", "TheImposterImposters/URPM-SD1.5-v2.3.inpainting"),
             

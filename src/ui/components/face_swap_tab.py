@@ -20,6 +20,10 @@ from src.utils import Config
 class FaceSwapTab:
     """얼굴 교체 탭 컴포넌트"""
     
+    # 하위 클래스에서 재정의 가능한 탭 제목/헤더
+    TAB_TITLE = "얼굴 교체"
+    TAB_HEADER = "## 🔄 얼굴 교체"
+    
     def __init__(self, face_manager: FaceManager, file_manager: FileManager):
         """
         초기화
@@ -40,8 +44,8 @@ class FaceSwapTab:
         Returns:
             Gradio Tab 컴포넌트
         """
-        with gr.Tab("얼굴 교체") as tab:
-            gr.Markdown("## 🔄 얼굴 교체")
+        with gr.Tab(self.TAB_TITLE) as tab:
+            gr.Markdown(self.TAB_HEADER)
             
             with gr.Row():
                 with gr.Column(scale=1):
@@ -73,6 +77,9 @@ class FaceSwapTab:
                             size="sm",
                             scale=1
                         )
+                    
+                    # 하위 클래스 추가 컨트롤 (기본: 없음)
+                    self._create_extra_controls()
                     
                     # CodeFormer 복원 체크박스
                     self.codeformer_checkbox = gr.Checkbox(
@@ -216,6 +223,30 @@ class FaceSwapTab:
         
         return tab
     
+    def _create_extra_controls(self) -> None:
+        """
+        추가 컨트롤을 생성합니다. (하위 클래스에서 재정의)
+        """
+        pass
+    
+    def get_extra_swap_inputs(self) -> list:
+        """
+        얼굴 교체 시 추가로 전달할 (옵션명, Gradio 컴포넌트) 목록을 반환합니다.
+        (하위 클래스에서 재정의)
+        """
+        return []
+    
+    def _swap_faces(self, image_bgr: np.ndarray, face_indices: str, source_face_name: str, **swap_options) -> Tuple[bool, str, Optional[np.ndarray]]:
+        """
+        실제 얼굴 교체를 수행합니다. (하위 클래스에서 다른 모델로 재정의 가능)
+        
+        Returns:
+            (성공여부, 메시지, 교체된 이미지(RGB))
+        """
+        return self.face_manager.swap_faces(
+            image_bgr, face_indices, source_face_name, self.file_manager.faces_dir
+        )
+    
     def process_target_image(self, file_path: str, current_indices: str = "") -> Tuple[bool, str, Optional[np.ndarray], str, bool, str]:
         """
         타겟 이미지를 처리하고 얼굴 탐지 결과를 박스로 표시합니다.
@@ -265,7 +296,8 @@ class FaceSwapTab:
         fidelity: float = 0.5,
         preserve_mouth: bool = False, 
         mouth_settings: Optional[Dict[str, Any]] = None,
-        mouth_preserve_method: str = "ellipse"
+        mouth_preserve_method: str = "ellipse",
+        **swap_options
     ) -> Tuple[Optional[np.ndarray], str, Optional[np.ndarray]]:
         """
         얼굴 교체를 수행하고, 선택적으로 CodeFormer 복원도 수행합니다.
@@ -305,8 +337,8 @@ class FaceSwapTab:
             # "선택 안함"이 아닌 경우에만 얼굴 교체 수행
             if not is_no_face_selected:
                 # 얼굴 교체 수행
-                success, message, swapped_image_rgb = self.face_manager.swap_faces(
-                    image_bgr, face_indices, source_face_name, self.file_manager.faces_dir
+                success, message, swapped_image_rgb = self._swap_faces(
+                    image_bgr, face_indices, source_face_name, **swap_options
                 )
                 
                 if not success:
