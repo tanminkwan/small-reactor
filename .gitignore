@@ -182,3 +182,6 @@ faces/
 *.tiff
 *.webp
 *.pkl
+*.tif
+*.avif
+*.heic
