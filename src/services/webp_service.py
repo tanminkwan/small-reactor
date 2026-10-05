@@ -197,7 +197,8 @@ class WebPService:
         fidelity: float,
         face_manager: FaceManager,
         file_manager: FileManager,
-        progress_fn: Optional[Callable[[float, str], None]] = None
+        progress_fn: Optional[Callable[[float, str], None]] = None,
+        swap_model: Optional[str] = None
     ) -> Tuple[bool, str, int, Optional[np.ndarray]]:
         """
         지정된 디렉터리의 프레임 이미지들에 대해 일괄 얼굴 교체 및 복원을 수행합니다.
@@ -250,9 +251,15 @@ class WebPService:
                 
                 # 1. 얼굴 교체 수행 (선택된 얼굴이 있는 경우)
                 if not is_no_face:
-                    swap_ok, swap_msg, swapped_rgb = face_manager.swap_faces(
-                        img_bgr, face_indices, source_face_name, file_manager.faces_dir
-                    )
+                    if swap_model and swap_model.startswith("hyperswap"):
+                        swap_ok, swap_msg, swapped_rgb = face_manager.swap_faces_hyperswap(
+                            img_bgr, face_indices, source_face_name, file_manager.faces_dir,
+                            model_name=swap_model
+                        )
+                    else:
+                        swap_ok, swap_msg, swapped_rgb = face_manager.swap_faces(
+                            img_bgr, face_indices, source_face_name, file_manager.faces_dir
+                        )
                     if swap_ok and swapped_rgb is not None:
                         final_rgb = swapped_rgb
                 
@@ -290,6 +297,7 @@ class WebPService:
         fidelity: float,
         face_manager: FaceManager,
         file_manager: FileManager,
+        swap_model: Optional[str] = None,
     ):
         """
         지정된 디렉터리의 프레임 이미지들에 대해 일괄 얼굴 교체 및 복원을 수행하면서
@@ -328,9 +336,15 @@ class WebPService:
                 
                 # 1. 얼굴 교체 수행
                 if not is_no_face:
-                    swap_ok, swap_msg, swapped_rgb = face_manager.swap_faces(
-                        img_bgr, face_indices, source_face_name, file_manager.faces_dir
-                    )
+                    if swap_model and swap_model.startswith("hyperswap"):
+                        swap_ok, swap_msg, swapped_rgb = face_manager.swap_faces_hyperswap(
+                            img_bgr, face_indices, source_face_name, file_manager.faces_dir,
+                            model_name=swap_model
+                        )
+                    else:
+                        swap_ok, swap_msg, swapped_rgb = face_manager.swap_faces(
+                            img_bgr, face_indices, source_face_name, file_manager.faces_dir
+                        )
                     if swap_ok and swapped_rgb is not None:
                         final_rgb = swapped_rgb
                 

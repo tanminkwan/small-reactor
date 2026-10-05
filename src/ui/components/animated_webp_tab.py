@@ -20,6 +20,8 @@ from src.utils.config import Config
 class AnimatedWebPTab:
     """비디오 WebP 애니메이션 3단계 얼굴 교체 탭 컴포넌트"""
     
+    INSWAPPER_CHOICE = "inswapper"
+    
     def __init__(self, webp_service: WebPService, face_manager: FaceManager, file_manager: FileManager, config: Optional[Config] = None):
         """
         초기화
@@ -105,6 +107,14 @@ class AnimatedWebPTab:
                                 scale=4
                             )
                             self.refresh_faces_btn = gr.Button("🔄", variant="secondary", size="sm", scale=1)
+                        
+                        swap_model_choices = [self.INSWAPPER_CHOICE] + self.face_manager.get_hyperswap_model_choices()
+                        self.swap_model_dropdown = gr.Dropdown(
+                            label="얼굴 교체 모델",
+                            choices=swap_model_choices,
+                            value=swap_model_choices[0],
+                            info="InSwapper(기본) 또는 HyperSwap(1a: 속도·안정성 / 1b: 균형 / 1c: 품질·닮음)"
+                        )
                         
                         self.codeformer_checkbox = gr.Checkbox(
                             label="CodeFormer 복원 포함",
@@ -197,7 +207,8 @@ class AnimatedWebPTab:
                 self.face_indices_input,
                 self.source_face_dropdown,
                 self.codeformer_checkbox,
-                self.fidelity_slider
+                self.fidelity_slider,
+                self.swap_model_dropdown
             ],
             outputs=[self.swap_result_text, self.swapped_sample_image, self.combine_input_dir]
         )
@@ -245,6 +256,7 @@ class AnimatedWebPTab:
         source_face_name: str,
         use_codeformer: bool,
         fidelity: float,
+        swap_model: Optional[str] = None,
         progress=gr.Progress()
     ):
         """2단계 일괄 얼굴 교체 이벤트 핸들러 (실시간 진행 상황 스트리밍)"""
@@ -264,7 +276,8 @@ class AnimatedWebPTab:
             use_codeformer=use_codeformer,
             fidelity=fidelity,
             face_manager=self.face_manager,
-            file_manager=self.file_manager
+            file_manager=self.file_manager,
+            swap_model=None if swap_model == self.INSWAPPER_CHOICE else swap_model
         ):
             if total_count > 0:
                 pct = (current / total_count) * 100.0
